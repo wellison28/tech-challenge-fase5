@@ -1,0 +1,92 @@
+// Banco dedicado ao vehicle-service (database-per-service).
+// Nenhum outro serviço acessa estas tabelas: a comunicação é por API e eventos.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum VehicleStatus {
+  AVAILABLE
+  RESERVED
+  SOLD
+}
+
+enum FuelType {
+  FLEX
+  GASOLINE
+  ETHANOL
+  DIESEL
+  ELECTRIC
+  HYBRID
+}
+
+enum Transmission {
+  MANUAL
+  AUTOMATIC
+  CVT
+  AUTOMATED
+}
+
+model Vehicle {
+  id              String       @id @db.Uuid
+  vin             String       @unique @db.VarChar(17)
+  licensePlate    String?      @unique @map("license_plate") @db.VarChar(8)
+  brand           String       @db.VarChar(60)
+  model           String       @db.VarChar(80)
+  modelYear       Int          @map("model_year")
+  manufactureYear Int          @map("manufacture_year")
+  color           String       @db.VarChar(40)
+  mileageKm       Int          @map("mileage_km")
+  fuelType        FuelType     @map("fuel_type")
+  transmission    Transmission
+  priceInCents    Int          @map("price_in_cents")
+  status          VehicleStatus @default(AVAILABLE)
+
+  // Trava otimista: toda escrita exige a versão lida (ver VehicleRepository.update).
+  version         Int          @default(1)
+
+  // ---- Reserva ativa (no máximo uma por veículo) ----
+  reservationId         String?   @map("reservation_id") @db.Uuid
+  reservationCustomerId String?   @map("reservation_customer_id") @db.Uuid
+  reservationOrderId    String?   @map("reservation_order_id") @db.Uuid
+  reservedAt            DateTime? @map("reserved_at") @db.Timestamptz(3)
+  reservationExpiresAt  DateTime? @map("reservation_expires_at") @db.Timestamptz(3)
+
+  // ---- Venda concluída ----
+  saleOrderId      String?   @unique @map("sale_order_id") @db.Uuid
+  saleCustomerId   String?   @map("sale_customer_id") @db.Uuid
+  soldAt           DateTime? @map("sold_at") @db.Timestamptz(3)
+  soldPriceInCents Int?      @map("sold_price_in_cents")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  // Índice que sustenta os dois requisitos de listagem ordenada por preço.
+  @@index([status, priceInCents])
+  // Varredura do expirador de reservas.
+  @@index([reservationExpiresAt])
+  // Consulta da SAGA pelo pedido.
+  @@index([reservationOrderId])
+  @@map("vehicles")
+}
+
+/// Transactional Outbox: o evento é gravado na mesma transação da mudança de
+/// estado e entregue ao EventBridge por um processo separado.
+model OutboxEvent {
+  id          String    @id @db.Uuid
+  eventType   String    @map("event_type") @db.VarChar(80)
+  aggregateId String    @map("aggregate_id") @db.Uuid
+  payload     Json
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  publishedAt DateTime? @map("published_at") @db.Timestamptz(3)
+  attempts    Int       @default(0)
+  lastError   String?   @map("last_error") @db.Text
+
+  // Índice parcial: a fila de trabalho é só o que ainda não foi publicado.
+  @@index([publishedAt, createdAt])
+  @@map("outbox_events")
+}
