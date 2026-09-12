@@ -1,0 +1,141 @@
+// Banco dedicado ao customer-service (database-per-service).
+// É o único banco da plataforma que contém dado pessoal. Fica em subnet
+// privada, com criptografia em repouso por chave KMS gerenciada pelo cliente
+// (CMK) e, além disso, com os campos pessoais cifrados pela própria aplicação
+// — de modo que nem um DBA com SELECT irrestrito lê CPF em claro.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum CustomerStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  BLOCKED
+  ANONYMIZED
+}
+
+enum ConsentPurpose {
+  PURCHASE_PROCESSING
+  DOCUMENT_ISSUANCE
+  MARKETING
+  CREDIT_ANALYSIS
+}
+
+enum ConsentSource {
+  WEB_FORM
+  MOBILE_APP
+  IN_STORE
+  MIGRATION
+}
+
+enum DataAccessAction {
+  READ_SENSITIVE
+  READ_MASKED
+  CREATE
+  UPDATE
+  ELIGIBILITY_CHECK
+  EXPORT_FOR_BILLING
+  EXPORT_FOR_DOCUMENTATION
+  DATA_SUBJECT_EXPORT
+  ANONYMIZE
+  CONSENT_CHANGE
+}
+
+enum AccessOutcome {
+  ALLOWED
+  DENIED
+}
+
+model Customer {
+  id      String         @id @db.Uuid
+  status  CustomerStatus @default(PENDING_VERIFICATION)
+  version Int            @default(1)
+
+  /// Índices cegos (HMAC-SHA256 com pepper do Secrets Manager).
+  /// Permitem busca exata e unicidade sem armazenar CPF ou e-mail em claro.
+  cpfBlindIndex   String? @unique @map("cpf_blind_index") @db.Char(64)
+  emailBlindIndex String? @unique @map("email_blind_index") @db.Char(64)
+  /// Versão do pepper usada — viabiliza rotação sem indisponibilidade.
+  blindIndexVersion Int?  @map("blind_index_version")
+
+  /// Envelope AES-256-GCM com todos os campos pessoais.
+  /// Nulo após a anonimização: o texto cifrado e a chave de dados são
+  /// descartados, tornando a eliminação irreversível.
+  piiCiphertext       String? @map("pii_ciphertext") @db.Text
+  piiEncryptedDataKey String? @map("pii_encrypted_data_key") @db.Text
+  piiIv               String? @map("pii_iv") @db.VarChar(32)
+  piiAuthTag          String? @map("pii_auth_tag") @db.VarChar(32)
+  piiKeyId            String? @map("pii_key_id") @db.VarChar(200)
+  piiAlgorithm        String? @map("pii_algorithm") @db.VarChar(20)
+  piiSchemaVersion    Int?    @map("pii_schema_version")
+
+  consents CustomerConsent[]
+
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  anonymizedAt DateTime? @map("anonymized_at") @db.Timestamptz(3)
+
+  @@index([status, createdAt])
+  @@map("customers")
+}
+
+/// Registro de consentimento por finalidade. Não contém dado pessoal, por isso
+/// fica em claro — e precisa ficar, para ser consultável em auditoria.
+model CustomerConsent {
+  customerId    String         @map("customer_id") @db.Uuid
+  purpose       ConsentPurpose
+  granted       Boolean
+  policyVersion String         @map("policy_version") @db.VarChar(30)
+  grantedAt     DateTime?      @map("granted_at") @db.Timestamptz(3)
+  revokedAt     DateTime?      @map("revoked_at") @db.Timestamptz(3)
+  source        ConsentSource
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@id([customerId, purpose])
+  @@map("customer_consents")
+}
+
+/// Trilha de auditoria de acesso a dado pessoal (append-only).
+/// O papel da aplicação recebe apenas INSERT e SELECT nesta tabela — ver a
+/// migração `20260101000100_audit_append_only`.
+model DataAccessLog {
+  id            String           @id @db.Uuid
+  customerId    String           @map("customer_id") @db.Uuid
+  actorId       String           @map("actor_id") @db.VarChar(200)
+  actorType     String           @map("actor_type") @db.VarChar(10)
+  actorRoles    String[]         @map("actor_roles")
+  action        DataAccessAction
+  purpose       String           @db.VarChar(200)
+  fieldsAccessed String[]        @map("fields_accessed")
+  outcome       AccessOutcome
+  denialReason  String?          @map("denial_reason") @db.VarChar(300)
+  correlationId String           @map("correlation_id") @db.VarChar(100)
+  sourceIp      String?          @map("source_ip") @db.VarChar(45)
+  userAgent     String?          @map("user_agent") @db.VarChar(300)
+  occurredAt    DateTime         @default(now()) @map("occurred_at") @db.Timestamptz(3)
+
+  @@index([customerId, occurredAt])
+  @@index([actorId, occurredAt])
+  @@index([outcome, occurredAt])
+  @@map("data_access_logs")
+}
+
+model OutboxEvent {
+  id          String    @id @db.Uuid
+  eventType   String    @map("event_type") @db.VarChar(80)
+  aggregateId String    @map("aggregate_id") @db.Uuid
+  payload     Json
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  publishedAt DateTime? @map("published_at") @db.Timestamptz(3)
+  attempts    Int       @default(0)
+  lastError   String?   @map("last_error") @db.Text
+
+  @@index([publishedAt, createdAt])
+  @@map("outbox_events")
+}
