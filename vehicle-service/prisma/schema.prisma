@@ -1,7 +1,9 @@
 // Banco dedicado ao vehicle-service (database-per-service).
 // Nenhum outro serviço acessa estas tabelas: a comunicação é por API e eventos.
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  // Driver adapter: permite conectar com token IAM gerado a cada conexão.
+  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {

@@ -18,6 +18,7 @@ module "database" {
 
   name          = "${local.prefix}-${each.key}"
   database_name = each.value.database_name
+  app_username  = "${each.key}_service_app"
   environment   = var.environment
 
   vpc_id     = aws_vpc.main.id

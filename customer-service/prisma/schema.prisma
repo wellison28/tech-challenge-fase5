@@ -4,7 +4,9 @@
 // (CMK) e, além disso, com os campos pessoais cifrados pela própria aplicação
 // — de modo que nem um DBA com SELECT irrestrito lê CPF em claro.
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  // Driver adapter: permite conectar com token IAM gerado a cada conexão.
+  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {

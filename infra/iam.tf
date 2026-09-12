@@ -64,12 +64,8 @@ resource "aws_iam_role_policy" "lambda_database" {
         # Restrito ao proxy e ao usuário do próprio serviço.
         Resource = "arn:aws:rds-db:${var.aws_region}:${data.aws_caller_identity.current.account_id}:dbuser:${split(":", module.database[each.key].proxy_arn)[6]}/${each.key}_service_app"
       },
-      {
-        Sid      = "LeituraDasCredenciaisDoProprioBanco"
-        Effect   = "Allow"
-        Action   = ["secretsmanager:GetSecretValue"]
-        Resource = module.database[each.key].credentials_secret_arn
-      },
+      # Sem GetSecretValue em segredo de banco: com o token IAM a Lambda não
+      # precisa de senha nenhuma — nem a master, nem a do usuário de aplicação.
     ]
   })
 }

@@ -9,6 +9,11 @@ const envSchema = z.object({
   SERVICE_NAME: z.string().default('sales-service'),
 
   DATABASE_URL: z.string().url(),
+  /**
+   * `iam` gera um token IAM a cada conexão ao RDS Proxy — é o modo de produção.
+   * `password` usa a senha da DATABASE_URL, para desenvolvimento e testes.
+   */
+  DB_AUTH_MODE: z.enum(['password', 'iam']).default('password'),
 
   AWS_REGION: z.string().default('us-east-1'),
   EVENT_BUS_NAME: z.string().default('revenda-bus'),
@@ -65,6 +70,9 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   if (env.NODE_ENV === 'production') {
     if (env.AUTH_MODE === 'dev') {
       throw new Error('AUTH_MODE=dev é proibido em produção');
+    }
+    if (env.DB_AUTH_MODE === 'password') {
+      throw new Error('DB_AUTH_MODE=password é proibido em produção: use iam');
     }
     if (env.PAYMENT_PROVIDER === 'fake') {
       throw new Error('PAYMENT_PROVIDER=fake é proibido em produção');

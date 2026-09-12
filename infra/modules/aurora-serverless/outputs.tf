@@ -19,6 +19,11 @@ output "credentials_secret_arn" {
   value = aws_secretsmanager_secret.credentials.arn
 }
 
+output "app_credentials_secret_arn" {
+  description = "Segredo do usuário de aplicação: lido pelo Proxy e pelo job de migração, nunca pelas Lambdas."
+  value       = aws_secretsmanager_secret.app_credentials.arn
+}
+
 output "database_name" {
   value = var.database_name
 }

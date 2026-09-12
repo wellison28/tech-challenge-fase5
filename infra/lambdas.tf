@@ -21,6 +21,7 @@ locals {
     AWS_REGION_APP       = var.aws_region
     EVENT_BUS_NAME       = aws_cloudwatch_event_bus.main.name
     AUTH_MODE            = "cognito"
+    DB_AUTH_MODE         = "iam"
     COGNITO_ISSUER       = "https://cognito-idp.${var.aws_region}.amazonaws.com/${aws_cognito_user_pool.main.id}"
     COGNITO_USER_POOL_ID = aws_cognito_user_pool.main.id
     COGNITO_CLIENT_ID    = aws_cognito_user_pool_client.web.id

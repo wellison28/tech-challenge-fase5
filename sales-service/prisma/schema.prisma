@@ -2,7 +2,9 @@
 // Guarda o estado da SAGA. Não contém nenhum dado pessoal: apenas
 // identificadores opacos (customerId, vehicleId) e valores.
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  // Driver adapter: permite conectar com token IAM gerado a cada conexão.
+  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {

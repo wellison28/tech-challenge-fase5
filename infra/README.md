@@ -17,6 +17,15 @@ terraform apply -var-file=environments/prod.tfvars
 O estado fica em S3 com bloqueio no DynamoDB (ver `versions.tf`). Estado local
 em projeto de equipe produz `apply` concorrentes e destruição acidental.
 
+No deploy de cada serviço, o job de migração (dentro da VPC, com a credencial
+master) roda as migrações e grava no banco a senha do usuário de aplicação, que
+existe só no Secrets Manager:
+
+```bash
+npx prisma migrate deploy                                  # na pasta do serviço
+scripts/sincroniza-senha-banco.sh <prefixo> <vehicle|customer|sales>
+```
+
 Validação sem credenciais AWS:
 
 ```bash
@@ -54,6 +63,11 @@ gasto em repouso é baixo, e em troca nenhum serviço alcança as tabelas de out
 **Subnets de dados sem rota para a internet.** Nem de saída. Um banco que não
 consegue iniciar conexão para fora é um banco de onde não se exfiltra por
 conexão reversa.
+
+**Banco sem senha na Lambda.** As Lambdas conectam ao RDS Proxy com token IAM,
+gerado a cada conexão (`DB_AUTH_MODE=iam`), como `<serviço>_service_app`. A
+senha desse usuário vive só no Secrets Manager e é lida pelo Proxy; a Lambda não
+tem permissão de ler nenhum segredo de banco, nem o master.
 
 **Um NAT por zona.** Um NAT único economizaria, mas a perda daquela zona
 derrubaria a saída de internet de todas as Lambdas.

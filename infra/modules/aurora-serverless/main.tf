@@ -100,6 +100,36 @@ resource "aws_secretsmanager_secret_version" "credentials" {
   })
 }
 
+# Usuário da aplicação. As Lambdas nunca recebem esta senha: elas se autenticam
+# no Proxy com token IAM, e é o Proxy que usa este segredo para abrir a conexão
+# real no banco. A senha master fica restrita a migração e emergência.
+resource "random_password" "app" {
+  length  = 40
+  special = false
+}
+
+resource "aws_secretsmanager_secret" "app_credentials" {
+  name                    = "${var.name}/database/app"
+  description             = "Credenciais do usuario de aplicacao ${var.app_username}"
+  kms_key_id              = var.kms_key_arn
+  recovery_window_in_days = 7
+
+  tags = merge(var.tags, { Name = "${var.name}-db-app-credentials" })
+}
+
+resource "aws_secretsmanager_secret_version" "app_credentials" {
+  secret_id = aws_secretsmanager_secret.app_credentials.id
+
+  secret_string = jsonencode({
+    username = var.app_username
+    password = random_password.app.result
+    engine   = "postgres"
+    host     = aws_rds_cluster.this.endpoint
+    port     = 5432
+    dbname   = var.database_name
+  })
+}
+
 # -----------------------------------------------------------------------------
 # Cluster
 # -----------------------------------------------------------------------------
@@ -224,7 +254,7 @@ resource "aws_iam_role_policy" "proxy_secrets" {
       {
         Effect   = "Allow"
         Action   = ["secretsmanager:GetSecretValue"]
-        Resource = aws_secretsmanager_secret.credentials.arn
+        Resource = [aws_secretsmanager_secret.credentials.arn, aws_secretsmanager_secret.app_credentials.arn]
       },
       {
         Effect   = "Allow"
@@ -261,6 +291,14 @@ resource "aws_db_proxy" "this" {
     iam_auth    = "REQUIRED"
     secret_arn  = aws_secretsmanager_secret.credentials.arn
     description = "Credenciais do cluster ${var.name}"
+  }
+
+  # Usuário com que as Lambdas se conectam — sempre por token IAM.
+  auth {
+    auth_scheme = "SECRETS"
+    iam_auth    = "REQUIRED"
+    secret_arn  = aws_secretsmanager_secret.app_credentials.arn
+    description = "Usuario de aplicacao ${var.app_username}"
   }
 
   tags = merge(var.tags, { Name = "${var.name}-proxy" })

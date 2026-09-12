@@ -8,6 +8,11 @@ variable "database_name" {
   type        = string
 }
 
+variable "app_username" {
+  description = "Usuário de banco da aplicação. As Lambdas se conectam com ele, por token IAM."
+  type        = string
+}
+
 variable "vpc_id" {
   type = string
 }
