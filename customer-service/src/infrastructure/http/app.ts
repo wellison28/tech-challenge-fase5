@@ -22,7 +22,8 @@ export async function buildApp(container: Container): Promise<FastifyInstance> {
   const app = Fastify({
     // O cast mantém a instância tipada como FastifyInstance padrão: sem ele o
     // tipo do logger do pino vaza para a assinatura de todas as rotas.
-    logger: logger as FastifyBaseLogger,
+    // Fastify 5: instância de logger pronta vai em `loggerInstance`.
+    loggerInstance: logger as FastifyBaseLogger,
     /**
      * O correlation id vem do cliente quando existir (`x-correlation-id`), e é
      * gerado quando não. Propagá-lo por toda a SAGA é o que permite reconstruir
