@@ -1,0 +1,280 @@
+{
+  "Comment": "SAGA de compra de veiculo - orquestracao. Cada Task e uma Lambda do sales-service; a ordem, o retry e a rota de compensacao vivem aqui, e nao no codigo dos servicos.",
+  "StartAt": "ReservarVeiculo",
+  "TimeoutSeconds": 5400,
+  "States": {
+    "ReservarVeiculo": {
+      "Type": "Task",
+      "Comment": "Passo 1. Primeiro porque o veiculo e o recurso escasso e disputado: falhar aqui custa barato.",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${reserve_vehicle_function_arn}",
+        "Payload": {
+          "orderId.$": "$.orderId",
+          "correlationId.$": "$.correlationId"
+        }
+      },
+      "ResultSelector": {
+        "status.$": "$.Payload.status"
+      },
+      "ResultPath": "$.reservation",
+      "Retry": [
+        {
+          "Comment": "Apenas falhas transitorias. Um 409 (veiculo ja reservado) chega como SagaStepError nao-retryable e cai direto no Catch.",
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException",
+            "SagaStepRetryable"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2,
+          "JitterStrategy": "FULL"
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "MotivoVeiculoIndisponivel"
+        }
+      ],
+      "Next": "ValidarComprador"
+    },
+
+    "ValidarComprador": {
+      "Type": "Task",
+      "Comment": "Passo 2. Requisito: venda somente para comprador cadastrado. Nao trafega dado pessoal.",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${validate_customer_function_arn}",
+        "Payload": {
+          "orderId.$": "$.orderId",
+          "correlationId.$": "$.correlationId"
+        }
+      },
+      "ResultPath": null,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.TooManyRequestsException",
+            "SagaStepRetryable"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2,
+          "JitterStrategy": "FULL"
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "MotivoCompradorInelegivel"
+        }
+      ],
+      "Next": "EmitirCodigoPagamento"
+    },
+
+    "EmitirCodigoPagamento": {
+      "Type": "Task",
+      "Comment": "Passo 3. Unico ponto em que o sales-service toca dado pessoal; o perfil do pagador nao e persistido.",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${create_payment_function_arn}",
+        "Payload": {
+          "orderId.$": "$.orderId",
+          "correlationId.$": "$.correlationId"
+        }
+      },
+      "ResultPath": null,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.TooManyRequestsException",
+            "SagaStepRetryable"
+          ],
+          "IntervalSeconds": 3,
+          "MaxAttempts": 3,
+          "BackoffRate": 2,
+          "JitterStrategy": "FULL"
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "MotivoFalhaSistemica"
+        }
+      ],
+      "Next": "AguardarPagamento"
+    },
+
+    "AguardarPagamento": {
+      "Type": "Task",
+      "Comment": "Passo 4. Espera por callback: a execucao fica suspensa sem consumir computacao ate o webhook do provedor chamar SendTaskSuccess. TimeoutSeconds implementa a janela de pagamento - e o proprio orquestrador que detecta a desistencia por inacao, sem processo de varredura no caminho principal.",
+      "Resource": "arn:aws:states:::lambda:invoke.waitForTaskToken",
+      "Parameters": {
+        "FunctionName": "${register_payment_waiter_function_arn}",
+        "Payload": {
+          "orderId.$": "$.orderId",
+          "correlationId.$": "$.correlationId",
+          "taskToken.$": "$$.Task.Token"
+        }
+      },
+      "ResultPath": null,
+      "TimeoutSeconds": ${payment_window_seconds},
+      "Catch": [
+        {
+          "ErrorEquals": ["States.Timeout"],
+          "ResultPath": "$.error",
+          "Next": "MotivoPagamentoExpirado"
+        },
+        {
+          "Comment": "Pagamento recusado pelo provedor: o webhook responde com SendTaskFailure.",
+          "ErrorEquals": ["PagamentoRecusado"],
+          "ResultPath": "$.error",
+          "Next": "MotivoPagamentoRecusado"
+        },
+        {
+          "Comment": "Desistencia do cliente: a rota de cancelamento responde com SendTaskFailure.",
+          "ErrorEquals": ["ClienteDesistiu"],
+          "ResultPath": "$.error",
+          "Next": "MotivoClienteDesistiu"
+        },
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "MotivoFalhaSistemica"
+        }
+      ],
+      "Next": "ConfirmarVenda"
+    },
+
+    "ConfirmarVenda": {
+      "Type": "Task",
+      "Comment": "Passo 5. Baixa do veiculo no estoque. Se a reserva tiver expirado no intervalo, o vehicle-service recusa e a SAGA estorna - vender um carro que voltou a vitrine seria pior do que devolver o dinheiro.",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${confirm_sale_function_arn}",
+        "Payload": {
+          "orderId.$": "$.orderId",
+          "correlationId.$": "$.correlationId"
+        }
+      },
+      "ResultPath": null,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.TooManyRequestsException",
+            "SagaStepRetryable"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 5,
+          "BackoffRate": 2,
+          "JitterStrategy": "FULL"
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "MotivoFalhaSistemica"
+        }
+      ],
+      "Next": "CompraConcluida"
+    },
+
+    "CompraConcluida": {
+      "Type": "Succeed",
+      "Comment": "Venda efetivada. A retirada do veiculo (passo 6) e registrada pela loja no balcao, por uma chamada de API - nao faz parte desta execucao porque pode acontecer dias depois."
+    },
+
+    "MotivoVeiculoIndisponivel": {
+      "Type": "Pass",
+      "Result": "VEHICLE_UNAVAILABLE",
+      "ResultPath": "$.reason",
+      "Next": "Compensar"
+    },
+    "MotivoCompradorInelegivel": {
+      "Type": "Pass",
+      "Result": "CUSTOMER_NOT_ELIGIBLE",
+      "ResultPath": "$.reason",
+      "Next": "Compensar"
+    },
+    "MotivoPagamentoExpirado": {
+      "Type": "Pass",
+      "Result": "PAYMENT_TIMEOUT",
+      "ResultPath": "$.reason",
+      "Next": "Compensar"
+    },
+    "MotivoPagamentoRecusado": {
+      "Type": "Pass",
+      "Result": "PAYMENT_REFUSED",
+      "ResultPath": "$.reason",
+      "Next": "Compensar"
+    },
+    "MotivoClienteDesistiu": {
+      "Type": "Pass",
+      "Result": "CUSTOMER_GAVE_UP",
+      "ResultPath": "$.reason",
+      "Next": "Compensar"
+    },
+    "MotivoFalhaSistemica": {
+      "Type": "Pass",
+      "Result": "SYSTEM_FAILURE",
+      "ResultPath": "$.reason",
+      "Next": "Compensar"
+    },
+
+    "Compensar": {
+      "Type": "Task",
+      "Comment": "Desfaz, na ordem inversa, tudo que produziu efeito: cancela a cobranca e libera a reserva. Idempotente, e por isso seguro de repetir - o que importa, porque a compensacao tambem pode falhar.",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${compensate_function_arn}",
+        "Payload": {
+          "orderId.$": "$.orderId",
+          "correlationId.$": "$.correlationId",
+          "reason.$": "$.reason",
+          "detail.$": "States.JsonToString($.error)"
+        }
+      },
+      "ResultPath": null,
+      "Retry": [
+        {
+          "Comment": "Mais tentativas e mais tempo que nos passos normais: uma compensacao que nao completa deixa um veiculo fora do estoque.",
+          "ErrorEquals": ["States.ALL"],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 6,
+          "BackoffRate": 2,
+          "JitterStrategy": "FULL"
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.compensationError",
+          "Next": "CompensacaoFalhou"
+        }
+      ],
+      "Next": "CompraCancelada"
+    },
+
+    "CompraCancelada": {
+      "Type": "Succeed",
+      "Comment": "Compensacao concluida: o veiculo voltou a vitrine e a cobranca foi cancelada. A execucao termina em sucesso porque o processo se encerrou de forma consistente, ainda que sem venda."
+    },
+
+    "CompensacaoFalhou": {
+      "Type": "Fail",
+      "Error": "CompensacaoIncompleta",
+      "Cause": "A compensacao nao pode ser concluida apos as tentativas. O pedido permanece em COMPENSATING e exige intervencao: e o alarme mais critico da plataforma, porque significa um veiculo possivelmente preso fora do estoque."
+    }
+  }
+}
