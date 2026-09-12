@@ -1,0 +1,104 @@
+# Verificações que valem para o repositório inteiro, e não para um serviço.
+# Ficam em um workflow próprio para não rodarem três vezes idênticas.
+name: repositório
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  segredos:
+    name: Varredura de segredos
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Histórico completo: o gitleaks precisa varrer os commits, não só a
+          # árvore atual — uma chave removida depois continua no histórico.
+          fetch-depth: 0
+
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  infraestrutura:
+    name: Terraform e definição da SAGA
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+
+      - name: Formatação
+        run: terraform fmt -recursive -check -diff
+        working-directory: infra
+
+      # Sem backend: a validação de sintaxe e de referências não precisa de
+      # credencial da AWS nem de acesso ao estado remoto.
+      - name: Validação
+        run: |
+          terraform init -backend=false -input=false
+          terraform validate
+        working-directory: infra
+
+      # A definição da máquina de estados é um artefato entregue: um JSON
+      # inválido só apareceria no apply, e o deploy inteiro falharia.
+      - name: Definição da SAGA
+        run: |
+          python3 - <<'SCRIPT'
+          import json, re, pathlib
+          caminho = pathlib.Path('sales-service/infra/statemachine/purchase-saga.asl.json')
+          bruto = caminho.read_text()
+          # Substitui os placeholders do Terraform para validar o JSON.
+          sonda = re.sub(r'\$\{payment_window_seconds\}', '1500', bruto)
+          sonda = re.sub(r'\$\{[a-z_]+\}',
+                         'arn:aws:lambda:us-east-1:000000000000:function:x', sonda)
+          doc = json.loads(sonda)
+
+          assert doc['StartAt'] in doc['States'], 'StartAt aponta para estado inexistente'
+          for nome, estado in doc['States'].items():
+              alvos = [estado.get('Next')] + [c.get('Next') for c in estado.get('Catch', [])]
+              for alvo in alvos:
+                  assert alvo is None or alvo in doc['States'], \
+                      f'{nome} aponta para {alvo}, que nao existe'
+          terminais = {n for n, e in doc['States'].items()
+                       if e['Type'] in ('Succeed', 'Fail')}
+          assert terminais, 'a maquina nao tem estado terminal'
+          print(f"ASL valida: {len(doc['States'])} estados, "
+                f"{len(terminais)} terminais")
+          SCRIPT
+
+  documentacao:
+    name: Documento dos relatórios
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - run: pip install markdown
+
+      # Regera o documento e falha se o resultado divergir do versionado: sem
+      # isto, uma correção feita num .md sem rodar o build deixaria o PDF
+      # desatualizado sem nenhum sinal.
+      - name: Documento está em dia com os relatórios
+        run: |
+          python3 scripts/build-docs/build.py
+          if ! git diff --quiet docs/relatorios.html; then
+            echo "::error::docs/relatorios.html está desatualizado."
+            echo "Rode: python3 scripts/build-docs/build.py"
+            git diff --stat docs/relatorios.html
+            exit 1
+          fi
+          echo "documento em dia"
