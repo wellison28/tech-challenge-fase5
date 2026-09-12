@@ -1,0 +1,10 @@
+# Achados do gitleaks reconhecidos como falso positivo.
+#
+# Os três são a LOCAL_MASTER_KEY usada apenas com CRYPTO_MODE=local — em
+# desenvolvimento (docker-compose, .env.example) e no CI. Não protegem dado
+# real: em produção a cifra usa KMS, e o loadEnv recusa CRYPTO_MODE=local
+# quando NODE_ENV=production. Estão no histórico, por isso a exceção é pela
+# impressão digital (commit:arquivo:regra:linha), e não pela remoção do valor.
+7a3bec4288eb2491f2a0ac1d574ac0a286feeea5:.github/workflows/customer-service.yml:generic-api-key:53
+a821a9a362f70746754ea1e98e00be89a78f49bf:customer-service/.env.example:generic-api-key:28
+8f68bc0d7eb4f494d2f8f6a5291dfddbeb714cc7:docker-compose.yml:generic-api-key:124
