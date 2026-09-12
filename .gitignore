@@ -43,3 +43,8 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 *.swp
+
+# ---- Gerador local do PDF dos relatórios ----
+# O PDF é entregue à parte; o gerador e o HTML intermediário não fazem parte do código.
+scripts/build-docs/
+docs/relatorios.html

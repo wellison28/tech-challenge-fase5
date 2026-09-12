@@ -205,6 +205,10 @@ flowchart TB
 | `vehicle.sold` → BI, notificação, data lake | **Coreografia** | Consumidores independentes, cada um com seu ciclo |
 | `order.completed` → pesquisa de satisfação | **Coreografia** | Acessório ao processo; sua falha não afeta a venda |
 
+Os eventos já são publicados pelo outbox dos três serviços e as regras de
+roteamento estão provisionadas no EventBridge; os consumidores das linhas de
+coreografia são os **previstos** e não fazem parte desta entrega.
+
 O critério: **orquestração quando há efeito a desfazer; coreografia quando o
 fato já é definitivo.**
 
@@ -357,7 +361,8 @@ Mudança de estado e publicação de evento são escritas em sistemas diferentes
 Gravar o evento na **mesma transação** da mudança de estado elimina a janela em
 que o estoque muda sem ninguém ser avisado.
 
-Entrega é *at-least-once* — por isso todo consumidor deduplica por `eventId`.
+Entrega é *at-least-once* — por isso todo consumidor deve deduplicar por
+`eventId`, presente em todo evento publicado.
 
 ---
 

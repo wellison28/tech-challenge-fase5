@@ -15,7 +15,6 @@ tratamento de dados pessoais sob a LGPD e SAGA orquestrada entre os serviços.
 | **Desenho da arquitetura** + justificativa dos serviços e dos serviços de segurança | [`docs/01-arquitetura.md`](docs/01-arquitetura.md) |
 | **Relatório de segurança de dados** | [`docs/02-relatorio-seguranca.md`](docs/02-relatorio-seguranca.md) |
 | **Relatório de orquestração SAGA** | [`docs/03-relatorio-saga.md`](docs/03-relatorio-saga.md) |
-| Os três em um documento único, pronto para imprimir em PDF | [`docs/relatorios.html`](docs/relatorios.html) — gerado por [`scripts/build-docs/`](scripts/build-docs/) |
 | Código dos três microsserviços | [`vehicle-service/`](vehicle-service/) · [`customer-service/`](customer-service/) · [`sales-service/`](sales-service/) |
 | Infraestrutura como código (Terraform) | [`infra/`](infra/) |
 
@@ -42,7 +41,7 @@ caminho, e seu próprio artefato de deploy.
 | `.github/workflows/vehicle-service.yml` | muda `vehicle-service/**` | lint, tipos, testes, `npm audit`, build da imagem |
 | `.github/workflows/customer-service.yml` | muda `customer-service/**` | idem |
 | `.github/workflows/sales-service.yml` | muda `sales-service/**` | idem |
-| `.github/workflows/repositorio.yml` | qualquer push | varredura de segredos, Terraform `fmt`/`validate`, validação da definição da SAGA, e checagem de que `docs/relatorios.html` está em dia |
+| `.github/workflows/repositorio.yml` | qualquer push | varredura de segredos, Terraform `fmt`/`validate`, validação da definição da SAGA |
 
 Caso seja preciso separar os serviços depois,
 [`scripts/split-repos.sh`](scripts/split-repos.sh) extrai cada pasta como

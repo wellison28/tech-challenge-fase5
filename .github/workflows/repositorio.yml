@@ -76,29 +76,3 @@ jobs:
           print(f"ASL valida: {len(doc['States'])} estados, "
                 f"{len(terminais)} terminais")
           SCRIPT
-
-  documentacao:
-    name: Documento dos relatórios
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - run: pip install markdown
-
-      # Regera o documento e falha se o resultado divergir do versionado: sem
-      # isto, uma correção feita num .md sem rodar o build deixaria o PDF
-      # desatualizado sem nenhum sinal.
-      - name: Documento está em dia com os relatórios
-        run: |
-          python3 scripts/build-docs/build.py
-          if ! git diff --quiet docs/relatorios.html; then
-            echo "::error::docs/relatorios.html está desatualizado."
-            echo "Rode: python3 scripts/build-docs/build.py"
-            git diff --stat docs/relatorios.html
-            exit 1
-          fi
-          echo "documento em dia"

@@ -187,8 +187,11 @@ em acesso total à plataforma.
 - **Um papel IAM por serviço.** O papel do vehicle-service não tem
   `kms:Decrypt` na chave de dados pessoais; o do customer-service não pode
   iniciar execuções da SAGA.
-- **Conexão por token IAM**, não por senha embarcada no código ou em variável de
-  ambiente.
+- **Autenticação IAM exigida no RDS Proxy** (`iam_auth = REQUIRED`), com
+  `rds-db:connect` restrito ao usuário de banco do próprio serviço: nenhuma
+  senha de banco em código ou em variável de ambiente. A geração do token de
+  conexão na inicialização da Lambda (`@aws-sdk/rds-signer`) é o passo que
+  ainda falta no código para o deploy em nuvem.
 - **Papel de banco com privilégio mínimo** (`customer_service_app`):
   `SELECT/INSERT/UPDATE/DELETE` nas tabelas operacionais, mas **apenas
   `SELECT` e `INSERT`** na trilha de auditoria, sem nenhuma permissão de DDL.
@@ -304,8 +307,10 @@ consumido por vários serviços e ficam retidos em filas, DLQs, arquivos de repl
 e logs de entrega — é exatamente o tipo de lugar onde um CPF acaba esquecido em
 texto claro.
 
-O payload leva apenas o `customerId` opaco. Há **teste automatizado** nos três
-serviços verificando que nenhum evento publicado contém CPF, e-mail ou nome.
+O payload leva apenas o `customerId` opaco. Há **teste automatizado** no
+customer-service e no sales-service — os dois que manipulam dado pessoal —
+verificando que nenhum evento publicado contém CPF, e-mail ou nome. O
+vehicle-service não recebe dado pessoal, apenas o UUID do comprador.
 
 ### 4.5 Retenção e descarte
 
@@ -341,9 +346,12 @@ identifica ninguém.
 O HMAC do CPF também é apagado — mantê-lo permitiria confirmar "esta pessoa
 esteve aqui", o que é, por si só, um dado pessoal.
 
-O evento `customer.anonymized` propaga a eliminação para os demais serviços, que
-descartam qualquer dado derivado. Sem essa propagação, a eliminação seria
-parcial — e portanto não seria eliminação.
+O evento `customer.anonymized` é publicado pelo outbox e já tem regra de
+roteamento no EventBridge. Nesta entrega nenhum outro serviço guarda dado
+derivado do titular — vehicle-service e sales-service conhecem apenas o UUID —,
+então não há o que propagar. A regra existe para que qualquer consumidor futuro
+que mantenha cache ou projeção (BI, notificação) seja obrigado a tratar a
+eliminação; sem isso, ela passaria a ser parcial.
 
 A **trilha de auditoria sobrevive** à anonimização: ela não guarda dado pessoal,
 apenas o identificador opaco, e é a prova de que o pedido do titular foi
@@ -370,7 +378,7 @@ e-mail: a lei exige que revogar seja tão fácil quanto consentir (art. 8º, §5
 | Controle | Onde |
 |---|---|
 | `npm audit --audit-level=high` | CI de cada serviço, falha o build |
-| gitleaks | CI de cada serviço |
+| gitleaks | CI do repositório, em todo *push* |
 | Lint, typecheck e testes obrigatórios | CI |
 | Cobertura mínima de 85% em `domain/` e `application/` | CI |
 | Validação da definição da SAGA | CI do sales-service |
@@ -517,6 +525,6 @@ reputacional e regulatório correspondente.
 | **Aplicação** | Mascaramento por padrão, finalidade obrigatória, verificação de titularidade, validação de schema, rate limit próprio |
 | **Dados** | Envelope encryption AES-256-GCM com AAD, índice cego com pepper, CMK por finalidade, criptografia de volume |
 | **Rede** | VPC de três camadas, subnets de dados sem rota para a internet, security groups por serviço, VPC endpoints, TLS obrigatório |
-| **Acesso** | Papel IAM por serviço, token IAM no banco, papel de banco com privilégio mínimo, auditoria append-only |
+| **Acesso** | Papel IAM por serviço, autenticação IAM no RDS Proxy, papel de banco com privilégio mínimo, auditoria append-only |
 | **Detecção** | GuardDuty, Security Hub, CloudTrail validado, Flow Logs, alarmes de negócio e de privacidade |
 | **Processo** | Fail fast na configuração, modos inseguros proibidos em produção, npm audit, gitleaks, cobertura mínima, imagem mínima sem root |
