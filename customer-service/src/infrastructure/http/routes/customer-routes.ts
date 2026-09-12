@@ -1,7 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
+import { z } from 'zod';
+import { ValidationError } from '../../../domain/errors/domain-error';
 import { Container } from '../../container';
 import {
+  AuthenticatedPrincipal,
+  ForbiddenError,
   TokenVerifier,
   authenticate,
   authorize,
@@ -31,6 +35,42 @@ export const SCOPE_ELIGIBILITY = 'revenda/customers.eligibility';
 export const SCOPE_BILLING = 'revenda/customers.billing';
 export const SCOPE_DOCUMENTATION = 'revenda/customers.documentation';
 
+const accountIdSchema = z.string().uuid();
+
+/**
+ * Define o id do cadastro a partir de quem está cadastrando.
+ *
+ * Autocadastro: o id é o `sub` do token. O comprador não escolhe o id da própria
+ * ficha nem cria ficha para outra conta — e o `sub` precisa ser de uma conta de
+ * usuário: um token máquina-a-máquina não cadastra ninguém.
+ *
+ * Na loja: exclusivo de `admin`, que informa o `sub` da conta criada para o
+ * comprador no balcão.
+ */
+function resolveRegistrationId(
+  principal: AuthenticatedPrincipal,
+  purpose: string,
+  informedId: string | undefined,
+): string {
+  if (purpose === 'IN_STORE_REGISTRATION') {
+    if (!principal.roles.includes(ROLE_ADMIN)) {
+      throw new ForbiddenError('Cadastro na loja é exclusivo da equipe da revenda');
+    }
+    if (!informedId) {
+      throw new ValidationError('Informe em customerId o sub da conta do comprador no Cognito');
+    }
+    return informedId;
+  }
+
+  if (informedId && informedId !== principal.subject) {
+    throw new ForbiddenError('Você só pode cadastrar a sua própria conta');
+  }
+  if (!accountIdSchema.safeParse(principal.subject).success) {
+    throw new ForbiddenError('O autocadastro exige o login de uma conta de comprador');
+  }
+  return principal.subject;
+}
+
 export async function customerRoutes(
   app: FastifyInstance,
   container: Container,
@@ -58,17 +98,22 @@ export async function customerRoutes(
   typed.post(
     '/customers',
     {
-      // Autocadastro público. O limite de taxa é bem mais apertado aqui do que
-      // nas demais rotas: é o endpoint que um atacante usaria para descobrir
+      // O cadastro exige login: nasce vinculado à conta do Cognito, cujo `sub`
+      // vira o id do comprador. O limite de taxa continua bem mais apertado do
+      // que nas demais rotas: é o endpoint que um atacante usaria para descobrir
       // quais CPFs já estão cadastrados a partir do erro de duplicidade.
       config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
-      onRequest: [requirePurpose(['SELF_REGISTRATION', 'IN_STORE_REGISTRATION'])],
+      onRequest: [auth, requirePurpose(['SELF_REGISTRATION', 'IN_STORE_REGISTRATION'])],
       schema: {
         tags: ['Cadastro'],
         summary: 'Cadastra um comprador',
         description:
-          'Requer o cabeçalho X-Data-Purpose. A resposta é sempre mascarada, ' +
-          'mesmo para quem enviou os dados.',
+          'Requer token e o cabeçalho X-Data-Purpose. No autocadastro (SELF_REGISTRATION) ' +
+          'o id do comprador é o `sub` do próprio token. No cadastro na loja ' +
+          '(IN_STORE_REGISTRATION), um `admin` informa em `customerId` o `sub` da conta ' +
+          'criada para o comprador. A resposta é sempre mascarada, mesmo para quem ' +
+          'enviou os dados.',
+        security: [{ bearerAuth: [] }],
         body: registerCustomerBodySchema,
         response: { 201: maskedCustomerResponseSchema, ...errors },
       },
@@ -76,6 +121,11 @@ export async function customerRoutes(
     async (request, reply) => {
       const customer = await container.useCases.registerCustomer.execute({
         ...request.body,
+        customerId: resolveRegistrationId(
+          request.principal!,
+          request.headers['x-data-purpose'] as string,
+          request.body.customerId,
+        ),
         context: toAccessContext(request),
       });
       return reply.status(201).header('Location', `/customers/${customer.id}`).send(customer);

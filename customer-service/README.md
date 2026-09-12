@@ -12,7 +12,8 @@ nenhum titular.
 
 | Capacidade | Quem consome |
 |---|---|
-| Autocadastro de comprador | Frontend (público, com limite de 5 req/min) |
+| Autocadastro de comprador | Frontend, com o comprador logado no Cognito — o `sub` da conta vira o id do cadastro (limite de 5 req/min) |
+| Cadastro presencial | `admin`, informando o `sub` da conta criada na loja |
 | Consulta e atualização cadastral (mascarada) | Titular, `support`, `admin` |
 | Ativação e bloqueio de cadastro | `admin` |
 | Consentimento: conceder e revogar | Titular, `admin` |

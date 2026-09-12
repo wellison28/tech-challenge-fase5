@@ -10,10 +10,15 @@ import { MaskedCustomerDTO, toMaskedCustomerDTO } from '../dto/customer-dto';
 import { EventFactory } from '../events/event-factory';
 import { AccessContext } from '../ports/access-context';
 import { Clock } from '../ports/clock';
-import { IdGenerator } from '../ports/id-generator';
 import { UnitOfWork } from '../ports/unit-of-work';
 
 export interface RegisterCustomerCommand {
+  /**
+   * `sub` da conta do comprador no Cognito. O cadastro usa o mesmo identificador
+   * da identidade: é o que permite ao titular autenticado alcançar o próprio
+   * cadastro, e ao sales-service abrir o pedido em nome de quem está logado.
+   */
+  customerId: string;
   fullName: string;
   cpf: string;
   birthDate: string;
@@ -44,7 +49,6 @@ export interface RegisterCustomerCommand {
 export class RegisterCustomerUseCase {
   constructor(
     private readonly uow: UnitOfWork,
-    private readonly ids: IdGenerator,
     private readonly clock: Clock,
     private readonly events: EventFactory,
     private readonly audit: AuditRecorder,
@@ -57,7 +61,7 @@ export class RegisterCustomerUseCase {
     const email = Email.create(command.email);
 
     const customer = Customer.create({
-      id: this.ids.generate(),
+      id: command.customerId,
       fullName: command.fullName,
       cpf: cpf.value,
       birthDate: new Date(command.birthDate),
@@ -79,6 +83,11 @@ export class RegisterCustomerUseCase {
       }
       if (await ctx.customers.findByEmail(email)) {
         throw new DuplicateResourceError('e-mail', email.mask());
+      }
+      // Uma conta, um cadastro: sem isto, a mesma identidade teria duas fichas
+      // e o `sub` do token deixaria de apontar para um titular único.
+      if (await ctx.customers.findById(command.customerId)) {
+        throw new DuplicateResourceError('conta', command.customerId);
       }
 
       await ctx.customers.create(customer);

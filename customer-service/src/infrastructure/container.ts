@@ -146,7 +146,7 @@ export async function buildContainer(overrides: ContainerOverrides = {}): Promis
     publisher,
     useCases: {
       registerCustomer: new RegisterCustomerUseCase(
-        unitOfWork, ids, clock, events, audit, env.PRIVACY_POLICY_VERSION,
+        unitOfWork, clock, events, audit, env.PRIVACY_POLICY_VERSION,
       ),
       getCustomer: new GetCustomerUseCase(unitOfWork, audit),
       updateCustomer: new UpdateCustomerUseCase(unitOfWork, clock, events, audit),

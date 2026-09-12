@@ -51,7 +51,7 @@ function setup() {
   return {
     uow,
     clock,
-    register: new RegisterCustomerUseCase(uow, ids, clock, events, audit, POLICY_VERSION),
+    register: new RegisterCustomerUseCase(uow, clock, events, audit, POLICY_VERSION),
     get: new GetCustomerUseCase(uow, audit),
     update: new UpdateCustomerUseCase(uow, clock, events, audit),
     status: new ChangeCustomerStatusUseCase(uow, clock, events, audit),
@@ -62,8 +62,14 @@ function setup() {
   };
 }
 
+/** Cada cadastro nasce de uma conta distinta do Cognito, como em produção. */
+let accountSequence = 0;
+const nextAccountId = () =>
+  `00000000-0000-4000-8000-${String(++accountSequence).padStart(12, '0')}`;
+
 function registrationPayload(overrides: Record<string, unknown> = {}) {
   return {
+    customerId: nextAccountId(),
     fullName: 'Maria Aparecida da Silva',
     cpf: VALID_CPF,
     birthDate: '1990-05-20',
@@ -139,6 +145,31 @@ describe('RegisterCustomerUseCase', () => {
     await expect(ctx.register.execute(registrationPayload({ cpf: VALID_CPF_2 }))).rejects.toThrow(
       DuplicateResourceError,
     );
+  });
+
+  it('usa o sub da conta do Cognito como id do cadastro', async () => {
+    const ctx = setup();
+    const payload = registrationPayload();
+
+    const customer = await ctx.register.execute(payload);
+
+    expect(customer.id).toBe(payload.customerId);
+  });
+
+  it('recusa um segundo cadastro para a mesma conta', async () => {
+    const ctx = setup();
+    const first = registrationPayload();
+    await ctx.register.execute(first);
+
+    await expect(
+      ctx.register.execute(
+        registrationPayload({
+          customerId: first.customerId,
+          cpf: VALID_CPF_2,
+          email: 'outro@exemplo.com',
+        }),
+      ),
+    ).rejects.toThrow(DuplicateResourceError);
   });
 });
 

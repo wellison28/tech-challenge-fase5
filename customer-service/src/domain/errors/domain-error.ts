@@ -46,13 +46,13 @@ export class ConflictError extends DomainError {
   }
 }
 
-/** Violação de unicidade de negócio (chassi/placa já cadastrados). */
+/** Violação de unicidade de negócio (CPF, e-mail ou conta já cadastrados). */
 export class DuplicateResourceError extends DomainError {
   readonly code = 'DUPLICATE_RESOURCE';
   readonly httpStatus = 409;
 
   constructor(field: string, value: string) {
-    super(`Já existe um veículo cadastrado com ${field} = ${value}`, { field, value });
+    super(`Já existe um cadastro com ${field} = ${value}`, { field, value });
   }
 }
 

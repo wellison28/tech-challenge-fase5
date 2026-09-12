@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 import type { FastifyInstance } from 'fastify';
 import { SignJWT } from 'jose';
+import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { loadEnv, resetEnvCache } from '../../src/infrastructure/config/env';
 import { buildContainer } from '../../src/infrastructure/container';
@@ -98,11 +99,15 @@ describe('API HTTP do customer-service', () => {
     resetEnvCache();
   });
 
-  const register = (overrides: Record<string, unknown> = {}) =>
+  /** Autocadastro feito pela própria conta: cada chamada, por padrão, é uma conta nova. */
+  const register = async (overrides: Record<string, unknown> = {}, account = randomUUID()) =>
     app.inject({
       method: 'POST',
       url: '/customers',
-      headers: { 'x-data-purpose': 'SELF_REGISTRATION' },
+      headers: {
+        authorization: `Bearer ${await signToken({ sub: account })}`,
+        'x-data-purpose': 'SELF_REGISTRATION',
+      },
       payload: { ...registration, ...overrides },
     });
 
@@ -124,6 +129,7 @@ describe('API HTTP do customer-service', () => {
       const response = await app.inject({
         method: 'POST',
         url: '/customers',
+        headers: { authorization: `Bearer ${await signToken({ sub: randomUUID() })}` },
         payload: registration,
       });
       expect(response.statusCode).toBe(403);
@@ -133,7 +139,10 @@ describe('API HTTP do customer-service', () => {
       const response = await app.inject({
         method: 'POST',
         url: '/customers',
-        headers: { 'x-data-purpose': 'MARKETING_ANALYTICS' },
+        headers: {
+          authorization: `Bearer ${await signToken({ sub: randomUUID() })}`,
+          'x-data-purpose': 'MARKETING_ANALYTICS',
+        },
         payload: registration,
       });
       expect(response.statusCode).toBe(403);
@@ -153,6 +162,76 @@ describe('API HTTP do customer-service', () => {
 
       expect(response.statusCode).toBe(409);
       expect(response.body).not.toContain(VALID_CPF);
+    });
+
+    it('exige login para cadastrar', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/customers',
+        headers: { 'x-data-purpose': 'SELF_REGISTRATION' },
+        payload: registration,
+      });
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('o id do cadastro é o sub da conta que se cadastrou', async () => {
+      const account = randomUUID();
+      const response = await register({}, account);
+
+      expect(response.statusCode).toBe(201);
+      expect(response.json().id).toBe(account);
+    });
+
+    it('recusa um segundo cadastro para a mesma conta', async () => {
+      const account = randomUUID();
+      await register({}, account);
+
+      const response = await register({ cpf: VALID_CPF_2, email: 'outra@exemplo.com' }, account);
+      expect(response.statusCode).toBe(409);
+    });
+
+    it('um comprador não cria cadastro para outra conta', async () => {
+      const response = await register({ customerId: randomUUID() });
+      expect(response.statusCode).toBe(403);
+    });
+
+    it('token máquina-a-máquina não faz autocadastro', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/customers',
+        headers: { authorization: `Bearer ${sagaToken}`, 'x-data-purpose': 'SELF_REGISTRATION' },
+        payload: registration,
+      });
+      expect(response.statusCode).toBe(403);
+    });
+
+    it('na loja, o admin cadastra informando o sub da conta do comprador', async () => {
+      const account = randomUUID();
+      const response = await app.inject({
+        method: 'POST',
+        url: '/customers',
+        headers: {
+          authorization: `Bearer ${adminToken}`,
+          'x-data-purpose': 'IN_STORE_REGISTRATION',
+        },
+        payload: { ...registration, consentSource: 'IN_STORE', customerId: account },
+      });
+
+      expect(response.statusCode).toBe(201);
+      expect(response.json().id).toBe(account);
+    });
+
+    it('cadastro na loja é exclusivo do admin', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/customers',
+        headers: {
+          authorization: `Bearer ${await signToken({ sub: randomUUID() })}`,
+          'x-data-purpose': 'IN_STORE_REGISTRATION',
+        },
+        payload: { ...registration, customerId: randomUUID() },
+      });
+      expect(response.statusCode).toBe(403);
     });
   });
 

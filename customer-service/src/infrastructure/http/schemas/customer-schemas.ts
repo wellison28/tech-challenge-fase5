@@ -24,6 +24,11 @@ export const identityDocumentSchema = z.object({
 });
 
 export const registerCustomerBodySchema = z.object({
+  /**
+   * Só no cadastro na loja: `sub` da conta do comprador no Cognito. No
+   * autocadastro o id vem do próprio token.
+   */
+  customerId: z.string().uuid().optional(),
   fullName: z.string().min(3).max(150),
   // A validação dos dígitos verificadores acontece aqui, na borda: rejeitar um
   // CPF impossível antes de chegar ao domínio evita gravar lixo e reduz a
