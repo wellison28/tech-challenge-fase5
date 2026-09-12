@@ -114,7 +114,7 @@ distintas, papéis IAM distintos e bancos distintos.
 
 | Perfil | Vitrine | Cadastro próprio | Cadastro de terceiro | Dado pessoal em claro | Gestão de estoque |
 |---|---|---|---|---|---|
-| Anônimo | ✅ | autocadastro | ❌ | ❌ | ❌ |
+| Anônimo | ✅ | ❌ (o autocadastro exige login no Cognito) | ❌ | ❌ | ❌ |
 | `customer` | ✅ | ✅ | ❌ | somente o próprio (portabilidade) | ❌ |
 | `support` (atendimento) | ✅ | ✅ | **mascarado** | ❌ | ❌ |
 | `admin` (equipe da revenda) | ✅ | ✅ | **mascarado** | ❌ | ✅ |
@@ -187,14 +187,17 @@ em acesso total à plataforma.
 - **Um papel IAM por serviço.** O papel do vehicle-service não tem
   `kms:Decrypt` na chave de dados pessoais; o do customer-service não pode
   iniciar execuções da SAGA.
-- **Autenticação IAM exigida no RDS Proxy** (`iam_auth = REQUIRED`), com
-  `rds-db:connect` restrito ao usuário de banco do próprio serviço: nenhuma
-  senha de banco em código ou em variável de ambiente. A geração do token de
-  conexão na inicialização da Lambda (`@aws-sdk/rds-signer`) é o passo que
-  ainda falta no código para o deploy em nuvem.
-- **Papel de banco com privilégio mínimo** (`customer_service_app`):
-  `SELECT/INSERT/UPDATE/DELETE` nas tabelas operacionais, mas **apenas
-  `SELECT` e `INSERT`** na trilha de auditoria, sem nenhuma permissão de DDL.
+- **Conexão por token IAM** no RDS Proxy (`iam_auth = REQUIRED`): a Lambda gera
+  um token de 15 minutos (`@aws-sdk/rds-signer`) a cada conexão que abre, com
+  `rds-db:connect` restrito ao usuário de banco do próprio serviço. Nenhuma
+  senha de banco em código, variável de ambiente ou repositório: a senha do
+  usuário de aplicação existe só no Secrets Manager, é lida pelo Proxy, e a
+  Lambda não tem permissão de lê-la.
+- **Papel de banco com privilégio mínimo**, um por serviço
+  (`vehicle_service_app`, `customer_service_app`, `sales_service_app`):
+  `SELECT/INSERT/UPDATE/DELETE` nas tabelas operacionais e nenhuma permissão de
+  DDL; no customer-service, **apenas `SELECT` e `INSERT`** na trilha de
+  auditoria.
 - **Security groups em três camadas**: as subnets de dados não têm rota para a
   internet, nem de saída; o cluster só aceita conexão do RDS Proxy; o Proxy só
   aceita conexão das Lambdas do serviço dono.
@@ -427,13 +430,13 @@ controles já implementados.
 | **Impacto residual** | **Baixo.** O que se obtém é a máscara, e o acesso fica registrado com o nome de quem o fez |
 | **Ação adicional** | Relatório mensal de acessos por operador; alerta sobre operador com volume muito acima da mediana |
 
-### Risco 4 — Enumeração de CPF pelo cadastro público
+### Risco 4 — Enumeração de CPF pelo cadastro
 
 | | |
 |---|---|
 | **Cenário** | Atacante envia CPFs sequenciais e usa a resposta `409` para descobrir quem já é cliente |
 | **Impacto** | Vazamento de pertencimento à base — informação valiosa para engenharia social |
-| **Controles** | WAF com limite de 100 req/5 min em `/customers`; limite de 5 req/min na aplicação; a mensagem de erro devolve o CPF **mascarado**; validação de dígitos verificadores reduz o espaço de busca útil |
+| **Controles** | O cadastro exige login em conta do Cognito, e cada tentativa fica atribuída a essa conta na trilha de auditoria; WAF com limite de 100 req/5 min em `/customers`; limite de 5 req/min na aplicação; a mensagem de erro devolve o CPF **mascarado**; validação de dígitos verificadores reduz o espaço de busca útil |
 | **Impacto residual** | **Baixo.** Nos limites atuais, varrer um espaço relevante levaria anos |
 | **Ação adicional** | Considerar CAPTCHA no autocadastro; alarme sobre pico de `409` neste endpoint |
 
