@@ -1,0 +1,18 @@
+# Copie para prod.tfvars e ajuste. O arquivo real não vai para o repositório.
+
+environment = "prod"
+aws_region  = "us-east-1"
+
+# Bucket onde o CI publica os pacotes .zip das Lambdas.
+lambda_artifacts_bucket = "revenda-lambda-artifacts"
+# Normalmente o SHA do commit implantado.
+lambda_artifact_version = "a1b2c3d4"
+
+frontend_origins = ["https://revenda.exemplo.com.br"]
+alarm_email      = "plantao@revenda.exemplo.com.br"
+
+# A janela de pagamento PRECISA ser menor que o TTL da reserva.
+reservation_ttl_minutes = 30
+payment_window_minutes  = 25
+
+log_retention_days = 90
