@@ -1,0 +1,619 @@
+<title>Arquitetura da Revenda</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:ital,wght@0,400;0,600;1,400&display=swap">
+<style>
+/* ===========================================================================
+   Identidade: folha de especificação técnica.
+   Família IBM Plex (desenhada para documentação de engenharia), azul de
+   instrumento como acento, laranja queimado reservado para risco, e os
+   diagramas sobre uma "prancha" clara em ambos os temas — como um desenho
+   técnico apoiado na mesa.
+   =========================================================================== */
+
+:root {
+  --paper:      #FCFCFD;
+  --surface:    #F1F4F8;
+  --surface-2:  #E7ECF2;
+  --ink:        #16202C;
+  --ink-strong: #0B131C;
+  --muted:      #5B6B7D;
+  --rule:       #D9E0E8;
+  --rule-strong:#B6C2CF;
+  --accent:     #17657F;
+  --accent-soft:#E3EFF3;
+  --signal:     #A8501B;
+  --signal-soft:#F7EBE1;
+  --ok:         #2B6A4E;
+
+  /* A prancha do diagrama é clara nos dois temas: o mermaid nativo desenha
+     com traço escuro, e um fundo escuro o tornaria ilegível. */
+  --plate:      #F7F9FB;
+  --plate-rule: #C9D4DE;
+  --plate-ink:  #16202C;
+
+  --measure: 68ch;
+  --column: 880px;
+  --step--1: 0.815rem;
+  --step-0:  1rem;
+  --step-1:  1.16rem;
+  --step-2:  1.42rem;
+  --step-3:  1.78rem;
+  --step-4:  2.3rem;
+  --step-5:  3.1rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper:      #0F151C;
+    --surface:    #171F28;
+    --surface-2:  #1F2932;
+    --ink:        #DCE4EC;
+    --ink-strong: #F2F6FA;
+    --muted:      #8B9BAD;
+    --rule:       #27323D;
+    --rule-strong:#3A4855;
+    --accent:     #62BAD6;
+    --accent-soft:#15303B;
+    --signal:     #DF9A63;
+    --signal-soft:#2E2019;
+    --ok:         #71C398;
+  }
+}
+
+:root[data-theme="dark"] {
+  --paper:      #0F151C;
+  --surface:    #171F28;
+  --surface-2:  #1F2932;
+  --ink:        #DCE4EC;
+  --ink-strong: #F2F6FA;
+  --muted:      #8B9BAD;
+  --rule:       #27323D;
+  --rule-strong:#3A4855;
+  --accent:     #62BAD6;
+  --accent-soft:#15303B;
+  --signal:     #DF9A63;
+  --signal-soft:#2E2019;
+  --ok:         #71C398;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "IBM Plex Serif", Georgia, "Times New Roman", serif;
+  font-size: var(--step-0);
+  line-height: 1.66;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* --------------------------------------------------------------------------
+   Estrutura
+   -------------------------------------------------------------------------- */
+
+.shell {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0;
+}
+
+@media (min-width: 1120px) {
+  .shell {
+    grid-template-columns: 250px minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
+.page {
+  max-width: var(--column);
+  margin-inline: auto;
+  padding-inline: 20px;
+  padding-block: 0 72px;
+  width: 100%;
+}
+
+/* --------------------------------------------------------------------------
+   Trilho lateral — sumário
+   -------------------------------------------------------------------------- */
+
+.rail {
+  display: none;
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
+}
+
+@media (min-width: 1120px) {
+  .rail {
+    display: block;
+    position: sticky;
+    top: 0;
+    max-height: 100vh;
+    overflow-y: auto;
+    padding: 40px 0 40px 28px;
+    border-right: 1px solid var(--rule);
+  }
+}
+
+.rail-brand {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.66rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 28px;
+  padding-right: 20px;
+}
+
+.rail-group { margin-bottom: 22px; padding-right: 20px; }
+
+.rail-group > a {
+  display: flex;
+  gap: 9px;
+  align-items: baseline;
+  text-decoration: none;
+  color: var(--ink-strong);
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.35;
+  margin-bottom: 7px;
+}
+.rail-group > a:hover { color: var(--accent); }
+
+.rail-num {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.66rem;
+  color: var(--accent);
+  font-weight: 500;
+  flex: none;
+}
+
+.rail-subs { list-style: none; margin: 0; padding: 0 0 0 24px; }
+
+.rail-subs a {
+  display: block;
+  text-decoration: none;
+  color: var(--muted);
+  font-size: 0.745rem;
+  line-height: 1.5;
+  padding: 2.5px 0;
+  border-left: 1.5px solid transparent;
+  padding-left: 10px;
+  margin-left: -10px;
+  transition: color .12s, border-color .12s;
+}
+.rail-subs a:hover { color: var(--accent); border-left-color: var(--accent); }
+
+/* --------------------------------------------------------------------------
+   Capa
+   -------------------------------------------------------------------------- */
+
+.cover {
+  padding-block: 64px 44px;
+  border-bottom: 2px solid var(--ink-strong);
+}
+
+.cover-eyebrow {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0 0 20px;
+}
+
+.cover h1 {
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
+  font-size: var(--step-5);
+  font-weight: 700;
+  line-height: 1.04;
+  letter-spacing: -0.025em;
+  margin: 0 0 18px;
+  color: var(--ink-strong);
+  text-wrap: balance;
+  max-width: 16ch;
+}
+
+.cover-lede {
+  font-size: var(--step-1);
+  line-height: 1.55;
+  color: var(--muted);
+  max-width: 54ch;
+  margin: 0 0 36px;
+}
+
+.spec-sheet {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1px;
+  background: var(--rule);
+  border: 1px solid var(--rule);
+}
+
+.spec {
+  background: var(--paper);
+  padding: 14px 16px;
+}
+
+.spec dt {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.spec dd {
+  margin: 0;
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
+  font-size: 0.94rem;
+  font-weight: 600;
+  color: var(--ink-strong);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
+}
+
+.spec dd small {
+  display: block;
+  font-weight: 400;
+  font-size: 0.76rem;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+/* --------------------------------------------------------------------------
+   Cabeçalho de cada entregável
+   -------------------------------------------------------------------------- */
+
+.deliverable { padding-block: 56px 0; }
+
+.deliverable-head {
+  display: flex;
+  gap: 20px;
+  align-items: baseline;
+  padding-bottom: 26px;
+  margin-bottom: 34px;
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+.deliverable-num {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: var(--step-2);
+  font-weight: 500;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  flex: none;
+  line-height: 1.1;
+}
+
+.deliverable-head h2 {
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
+  font-size: var(--step-4);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  margin: 0;
+  color: var(--ink-strong);
+  text-wrap: balance;
+}
+
+/* --------------------------------------------------------------------------
+   Corpo do documento
+   -------------------------------------------------------------------------- */
+
+.doc > p,
+.doc > ul,
+.doc > ol,
+.doc > blockquote { max-width: var(--measure); }
+
+.doc h2 {
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
+  font-size: var(--step-3);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.22;
+  color: var(--ink-strong);
+  margin: 52px 0 16px;
+  padding-top: 18px;
+  border-top: 1px solid var(--rule);
+  text-wrap: balance;
+  scroll-margin-top: 20px;
+}
+
+.doc h3 {
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
+  font-size: var(--step-1);
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--ink-strong);
+  margin: 34px 0 12px;
+  text-wrap: balance;
+}
+
+.doc h4 {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 26px 0 10px;
+}
+
+.doc p { margin: 0 0 15px; }
+
+.doc ul, .doc ol { margin: 0 0 16px; padding-left: 22px; }
+.doc li { margin-bottom: 7px; }
+.doc li::marker { color: var(--accent); }
+
+.doc strong { font-weight: 600; color: var(--ink-strong); }
+.doc em { font-style: italic; }
+
+.doc a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+}
+
+.doc hr {
+  border: 0;
+  border-top: 1px solid var(--rule);
+  margin: 40px 0;
+}
+
+.doc blockquote {
+  margin: 18px 0;
+  padding: 2px 0 2px 18px;
+  border-left: 2px solid var(--accent);
+  color: var(--muted);
+}
+
+/* Código --------------------------------------------------------------- */
+
+.doc code {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.855em;
+  background: var(--surface);
+  padding: 1px 5px;
+  border-radius: 2px;
+  color: var(--ink-strong);
+  word-break: break-word;
+}
+
+.doc pre.code {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-left: 2px solid var(--accent);
+  padding: 15px 18px;
+  overflow-x: auto;
+  margin: 0 0 20px;
+  font-size: var(--step--1);
+  line-height: 1.6;
+}
+
+.doc pre.code code {
+  background: none;
+  padding: 0;
+  font-size: inherit;
+  white-space: pre;
+}
+
+/* Tabelas -------------------------------------------------------------- */
+
+.table-wrap {
+  overflow-x: auto;
+  margin: 0 0 26px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.doc table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
+  font-size: 0.845rem;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+
+.doc thead th {
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 0 14px 9px 0;
+  border-bottom: 1.5px solid var(--rule-strong);
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+.doc tbody td {
+  padding: 10px 14px 10px 0;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+}
+
+.doc tbody tr:last-child td { border-bottom: 0; }
+
+.doc th:last-child, .doc td:last-child { padding-right: 0; }
+
+/* Tabela de definição: rótulo à esquerda, valor à direita. */
+.doc table.definition td:first-child {
+  width: 27%;
+  min-width: 130px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-weight: 600;
+  padding-top: 11px;
+}
+.doc table.definition td:first-child strong { font-weight: 600; color: inherit; }
+
+/* Diagramas — prancha clara em ambos os temas --------------------------- */
+
+.figure {
+  background: var(--plate);
+  border: 1px solid var(--plate-rule);
+  padding: 22px 18px;
+  margin: 0 0 26px;
+  overflow-x: auto;
+  color: var(--plate-ink);
+}
+
+.figure pre.mermaid {
+  margin: 0;
+  background: none;
+  border: 0;
+  padding: 0;
+  display: flex;
+  justify-content: center;
+  min-width: fit-content;
+}
+
+.figure svg { max-width: 100%; height: auto; }
+
+/* Diagramas ASCII dentro de blocos de código ---------------------------- */
+.doc pre.code code.language-text,
+.doc pre.code code:not([class]) { color: var(--ink); }
+
+/* --------------------------------------------------------------------------
+   Barra superior
+   -------------------------------------------------------------------------- */
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 20px;
+  background: color-mix(in srgb, var(--paper) 92%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--rule);
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
+}
+
+.topbar-label {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.66rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topbar-actions { display: flex; gap: 8px; flex: none; }
+
+.btn {
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
+  font-size: 0.76rem;
+  font-weight: 500;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--rule-strong);
+  padding: 6px 12px;
+  cursor: pointer;
+  border-radius: 2px;
+  line-height: 1.3;
+}
+.btn:hover { background: var(--surface-2); border-color: var(--accent); color: var(--accent); }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Sumário compacto para telas estreitas -------------------------------- */
+
+.compact-toc {
+  margin-block: 34px 0;
+  border: 1px solid var(--rule);
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
+}
+@media (min-width: 1120px) { .compact-toc { display: none; } }
+
+.compact-toc summary {
+  padding: 12px 16px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ink-strong);
+}
+.compact-toc ol { margin: 0; padding: 0 16px 14px 34px; }
+.compact-toc li { margin-bottom: 5px; font-size: 0.82rem; }
+.compact-toc a { color: var(--accent); text-decoration: none; }
+.compact-toc a:hover { text-decoration: underline; }
+
+/* Rodapé --------------------------------------------------------------- */
+
+.colophon {
+  margin-top: 64px;
+  padding-top: 22px;
+  border-top: 2px solid var(--ink-strong);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.68rem;
+  line-height: 1.7;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+
+html { scroll-behavior: smooth; }
+
+/* ==========================================================================
+   Impressão — é assim que este documento vira o PDF do entregável.
+   ========================================================================== */
+
+@media print {
+  @page {
+    size: A4;
+    margin: 18mm 16mm 20mm;
+  }
+
+  :root {
+    --paper: #FFFFFF;
+    --surface: #F4F6F8;
+    --surface-2: #ECEFF3;
+    --ink: #12181F;
+    --ink-strong: #000000;
+    --muted: #4A5866;
+    --rule: #C7CFD8;
+    --rule-strong: #8E9BA8;
+    --accent: #10556B;
+    --signal: #8C4315;
+  }
+
+  body { font-size: 9.7pt; line-height: 1.5; background: #fff; }
+
+  .topbar, .rail, .compact-toc { display: none !important; }
+  .shell { display: block; }
+  .page { max-width: none; padding: 0; }
+
+  /* Cada entregável começa em página nova. */
+  .deliverable { break-before: page; padding-block: 0; }
+  .cover { padding-block: 0 26px; break-after: page; }
+
+  .deliverable-head h2 { font-size: 19pt; }
+  .doc h2 { font-size: 13pt; margin-top: 20pt; break-after: avoid; }
+  .doc h3 { font-size: 11pt; margin-top: 14pt; break-after: avoid; }
+  .doc h4 { break-after: avoid; }
+  .doc p, .doc li { orphans: 3; widows: 3; }
+
+  .table-wrap, .figure, .doc pre.code { break-inside: avoid; overflow: visible; }
+  .doc table { font-size: 8.3pt; }
+  .doc thead { display: table-header-group; }
+  .doc tbody tr { break-inside: avoid; }
+
+  .figure { background: #fff; border-color: #C7CFD8; }
+  .doc a { color: #10556B; text-decoration: none; }
+  .colophon { break-inside: avoid; }
+}
+</style>

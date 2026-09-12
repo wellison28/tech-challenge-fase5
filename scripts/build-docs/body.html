@@ -1,0 +1,120 @@
+
+<div class="topbar">
+  <span class="topbar-label">Revenda de veículos · Arquitetura de Software</span>
+  <div class="topbar-actions">
+    <button class="btn" id="print-btn" type="button">Salvar em PDF</button>
+    <button class="btn" id="theme-btn" type="button" aria-pressed="false">Tema</button>
+  </div>
+</div>
+
+<div class="shell">
+<!--RAIL-->
+
+  <main class="page">
+    <header class="cover">
+      <p class="cover-eyebrow">Tech Challenge · Fase 5 · Pós-graduação em Arquitetura de Software</p>
+      <h1>Plataforma de revenda de veículos</h1>
+      <p class="cover-lede">
+        Três microsserviços serverless na AWS para uma revenda de automóveis: catálogo
+        e estoque, cadastro de compradores sob a LGPD, e o processo de compra completo
+        — da reserva do veículo à retirada — coordenado por uma SAGA orquestrada.
+      </p>
+
+      <dl class="spec-sheet">
+        <div class="spec">
+          <dt>Serviços</dt>
+          <dd>3<small>um banco de dados cada</small></dd>
+        </div>
+        <div class="spec">
+          <dt>Passos da SAGA</dt>
+          <dd>6<small>com compensação</small></dd>
+        </div>
+        <div class="spec">
+          <dt>Testes automatizados</dt>
+          <dd>244<small>86–92% de cobertura</small></dd>
+        </div>
+        <div class="spec">
+          <dt>Dado pessoal</dt>
+          <dd>1 serviço<small>cifrado em nível de campo</small></dd>
+        </div>
+        <div class="spec">
+          <dt>Stack</dt>
+          <dd>Node 20 · TS<small>Lambda · Aurora · Step Functions</small></dd>
+        </div>
+        <div class="spec">
+          <dt>Infraestrutura</dt>
+          <dd>Terraform<small>validado no CI</small></dd>
+        </div>
+      </dl>
+
+<!--COMPACT_TOC-->
+    </header>
+
+<!--SECTIONS-->
+
+    <footer class="colophon">
+      <p>
+        Documento gerado a partir dos relatórios versionados em <code>docs/</code> do
+        repositório. Código-fonte dos três microsserviços, infraestrutura como código
+        e definição da máquina de estados acompanham a entrega.
+      </p>
+      <p>Para o PDF: <strong>Salvar em PDF</strong> no topo da página, ou Ctrl/Cmd + P.</p>
+    </footer>
+  </main>
+</div>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    var themeBtn = document.getElementById('theme-btn');
+    var printBtn = document.getElementById('print-btn');
+
+    // A preferência de tema é conveniência por leitor; se o armazenamento
+    // estiver bloqueado, a página continua respeitando o tema do sistema.
+    try {
+      var saved = localStorage.getItem('revenda-doc-theme');
+      if (saved === 'dark' || saved === 'light') {
+        root.setAttribute('data-theme', saved);
+      }
+    } catch (e) {}
+
+    function currentIsDark() {
+      var stamped = root.getAttribute('data-theme');
+      if (stamped) return stamped === 'dark';
+      return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+
+    themeBtn.setAttribute('aria-pressed', String(currentIsDark()));
+
+    themeBtn.addEventListener('click', function () {
+      var next = currentIsDark() ? 'light' : 'dark';
+      root.setAttribute('data-theme', next);
+      themeBtn.setAttribute('aria-pressed', String(next === 'dark'));
+      try { localStorage.setItem('revenda-doc-theme', next); } catch (e) {}
+    });
+
+    printBtn.addEventListener('click', function () { window.print(); });
+
+    // A barra superior mostra em qual entregável o leitor está.
+    var label = document.querySelector('.topbar-label');
+    var base = label.textContent;
+    var deliverables = Array.prototype.slice.call(document.querySelectorAll('.deliverable'));
+    if ('IntersectionObserver' in window && deliverables.length) {
+      var observer = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (entry.isIntersecting) {
+            var heading = entry.target.querySelector('h2');
+            var num = entry.target.querySelector('.deliverable-num');
+            label.textContent = num.textContent + ' · ' + heading.textContent;
+          }
+        });
+      }, { rootMargin: '-10% 0px -80% 0px' });
+      deliverables.forEach(function (el) { observer.observe(el); });
+
+      // Volta ao rótulo original no topo da página.
+      window.addEventListener('scroll', function () {
+        if (window.scrollY < 120) label.textContent = base;
+      }, { passive: true });
+    }
+  })();
+</script>
