@@ -1,0 +1,45 @@
+# ---- Dependências e build ----
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+
+# ---- Testes ----
+coverage/
+.vitest/
+
+# ---- Ambiente ----
+# Nenhum .env vai para o repositório. Cada serviço versiona apenas o
+# .env.example, que documenta as variáveis sem carregar valor real.
+.env
+.env.*
+!.env.example
+
+# ---- Terraform ----
+# O estado contém identificadores e valores sensíveis; vive no S3 cifrado.
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+override.tf
+override.tf.json
+
+# ---- Prisma ----
+# O client é gerado por `prisma generate` a partir do schema versionado.
+**/node_modules/.prisma/
+**/generated/
+
+# ---- Logs e temporários ----
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+# ---- Editores ----
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp

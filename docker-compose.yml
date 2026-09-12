@@ -1,0 +1,158 @@
+# Plataforma completa em ambiente local.
+#
+# Cada microsserviço tem o **seu próprio banco** (database-per-service): nenhum
+# serviço alcança as tabelas de outro, nem aqui. Reproduzir esse isolamento no
+# ambiente de desenvolvimento é o que impede que um `JOIN` entre contextos
+# apareça por descuido e só seja descoberto no deploy.
+#
+# O LocalStack substitui EventBridge, KMS, Secrets Manager e Step Functions,
+# permitindo exercitar os caminhos de nuvem sem conta AWS.
+
+name: revenda-veiculos
+
+x-postgres-common: &postgres-common
+  image: postgres:16-alpine
+  restart: unless-stopped
+  healthcheck:
+    test: ['CMD-SHELL', 'pg_isready -U revenda']
+    interval: 10s
+    timeout: 5s
+    retries: 5
+
+x-service-common: &service-common
+  restart: unless-stopped
+  environment: &service-env
+    NODE_ENV: development
+    LOG_LEVEL: debug
+    AWS_REGION: us-east-1
+    AWS_ENDPOINT_URL: http://localstack:4566
+    AWS_ACCESS_KEY_ID: test
+    AWS_SECRET_ACCESS_KEY: test
+    EVENT_BUS_NAME: revenda-bus
+    AUTH_MODE: dev
+    JWT_DEV_SECRET: dev-only-secret-change-me
+
+services:
+  # ---------------------------------------------------------------------------
+  # Bancos de dados — um por serviço
+  # ---------------------------------------------------------------------------
+
+  postgres-vehicles:
+    <<: *postgres-common
+    container_name: revenda-postgres-vehicles
+    environment:
+      POSTGRES_USER: revenda
+      POSTGRES_PASSWORD: revenda
+      POSTGRES_DB: vehicles
+    ports: ['5432:5432']
+    volumes: ['vehicles-data:/var/lib/postgresql/data']
+
+  postgres-customers:
+    <<: *postgres-common
+    container_name: revenda-postgres-customers
+    environment:
+      POSTGRES_USER: revenda
+      POSTGRES_PASSWORD: revenda
+      POSTGRES_DB: customers
+    ports: ['5433:5432']
+    volumes: ['customers-data:/var/lib/postgresql/data']
+
+  postgres-sales:
+    <<: *postgres-common
+    container_name: revenda-postgres-sales
+    environment:
+      POSTGRES_USER: revenda
+      POSTGRES_PASSWORD: revenda
+      POSTGRES_DB: sales
+    ports: ['5434:5432']
+    volumes: ['sales-data:/var/lib/postgresql/data']
+
+  # ---------------------------------------------------------------------------
+  # Emulação dos serviços gerenciados da AWS
+  # ---------------------------------------------------------------------------
+
+  localstack:
+    image: localstack/localstack:3.8
+    container_name: revenda-localstack
+    restart: unless-stopped
+    environment:
+      SERVICES: events,kms,secretsmanager,stepfunctions,sqs,sns
+      DEBUG: 0
+      AWS_DEFAULT_REGION: us-east-1
+    ports: ['4566:4566']
+    volumes:
+      - './scripts/localstack-init.sh:/etc/localstack/init/ready.d/init.sh:ro'
+    healthcheck:
+      test: ['CMD', 'curl', '-sf', 'http://localhost:4566/_localstack/health']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ---------------------------------------------------------------------------
+  # Microsserviços
+  # ---------------------------------------------------------------------------
+
+  vehicle-service:
+    <<: *service-common
+    build:
+      context: ./vehicle-service
+    container_name: revenda-vehicle-service
+    environment:
+      <<: *service-env
+      SERVICE_NAME: vehicle-service
+      PORT: 3001
+      DATABASE_URL: postgresql://revenda:revenda@postgres-vehicles:5432/vehicles?schema=public
+      RESERVATION_TTL_MINUTES: 30
+    ports: ['3001:3001']
+    depends_on:
+      postgres-vehicles: { condition: service_healthy }
+      localstack: { condition: service_healthy }
+
+  customer-service:
+    <<: *service-common
+    build:
+      context: ./customer-service
+    container_name: revenda-customer-service
+    environment:
+      <<: *service-env
+      SERVICE_NAME: customer-service
+      PORT: 3002
+      DATABASE_URL: postgresql://revenda:revenda@postgres-customers:5432/customers?schema=public
+      # Em produção estes dois viram KMS + Secrets Manager; `loadEnv` recusa o
+      # modo local quando NODE_ENV=production.
+      CRYPTO_MODE: local
+      LOCAL_MASTER_KEY: bG9jYWwtZGV2LW1hc3Rlci1rZXktMzItYnl0ZXMtISE=
+      CPF_BLIND_INDEX_PEPPER: dev-only-pepper-change-me
+      PRIVACY_POLICY_VERSION: '2026-01'
+    ports: ['3002:3002']
+    depends_on:
+      postgres-customers: { condition: service_healthy }
+      localstack: { condition: service_healthy }
+
+  sales-service:
+    <<: *service-common
+    build:
+      context: ./sales-service
+    container_name: revenda-sales-service
+    environment:
+      <<: *service-env
+      SERVICE_NAME: sales-service
+      PORT: 3003
+      DATABASE_URL: postgresql://revenda:revenda@postgres-sales:5432/sales?schema=public
+      VEHICLE_SERVICE_URL: http://vehicle-service:3001
+      CUSTOMER_SERVICE_URL: http://customer-service:3002
+      SAGA_MODE: inline
+      PAYMENT_PROVIDER: fake
+      PAYMENT_WEBHOOK_SECRET: dev-only-webhook-secret
+      PAYMENT_WINDOW_MINUTES: 25
+      VEHICLE_RESERVATION_TTL_MINUTES: 30
+    ports: ['3003:3003']
+    depends_on:
+      postgres-sales: { condition: service_healthy }
+      vehicle-service: { condition: service_started }
+      customer-service: { condition: service_started }
+
+volumes:
+  vehicles-data:
+  customers-data:
+  sales-data:
