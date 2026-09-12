@@ -1,0 +1,100 @@
+// Banco dedicado ao sales-service (database-per-service).
+// Guarda o estado da SAGA. Não contém nenhum dado pessoal: apenas
+// identificadores opacos (customerId, vehicleId) e valores.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum OrderStatus {
+  PENDING
+  VEHICLE_RESERVED
+  CUSTOMER_VALIDATED
+  AWAITING_PAYMENT
+  PAID
+  SALE_CONFIRMED
+  COMPLETED
+  COMPENSATING
+  CANCELLED
+  FAILED
+}
+
+enum CancellationReason {
+  CUSTOMER_GAVE_UP
+  PAYMENT_TIMEOUT
+  PAYMENT_REFUSED
+  VEHICLE_UNAVAILABLE
+  CUSTOMER_NOT_ELIGIBLE
+  SYSTEM_FAILURE
+}
+
+model Order {
+  id         String      @id @db.Uuid
+  customerId String      @map("customer_id") @db.Uuid
+  vehicleId  String      @map("vehicle_id") @db.Uuid
+  status     OrderStatus @default(PENDING)
+  version    Int         @default(1)
+
+  amountInCents Int? @map("amount_in_cents")
+
+  reservationId        String?   @map("reservation_id") @db.Uuid
+  reservationExpiresAt DateTime? @map("reservation_expires_at") @db.Timestamptz(3)
+
+  /// Identificador da cobrança no provedor. Único: impede que dois pedidos
+  /// sejam associados à mesma cobrança por um webhook malformado.
+  paymentChargeId     String?   @unique @map("payment_charge_id") @db.VarChar(100)
+  paymentCode         String?   @map("payment_code") @db.VarChar(512)
+  /// Token de callback do Step Functions enquanto a execução aguarda o
+  /// pagamento. Apagado assim que consumido.
+  sagaTaskToken       String?   @map("saga_task_token") @db.VarChar(1024)
+  paymentCodeExpiresAt DateTime? @map("payment_code_expires_at") @db.Timestamptz(3)
+  paidAt              DateTime? @map("paid_at") @db.Timestamptz(3)
+  deliveredAt         DateTime? @map("delivered_at") @db.Timestamptz(3)
+
+  cancellationReason CancellationReason? @map("cancellation_reason")
+  cancellationDetail String?             @map("cancellation_detail") @db.VarChar(500)
+
+  /// Linha do tempo da SAGA: um registro por passo executado.
+  /// Persistida junto do pedido porque é lida sempre com ele e nunca sozinha.
+  timeline Json @default("[]")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  /// Sustenta a varredura de pedidos com janela de pagamento vencida.
+  @@index([status, paymentCodeExpiresAt])
+  /// Consulta "meus pedidos" no frontend.
+  @@index([customerId, createdAt])
+  /// Detecção de pedido duplicado para o mesmo veículo.
+  @@index([vehicleId, status])
+  @@map("orders")
+}
+
+model OutboxEvent {
+  id          String    @id @db.Uuid
+  eventType   String    @map("event_type") @db.VarChar(80)
+  aggregateId String    @map("aggregate_id") @db.Uuid
+  payload     Json
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  publishedAt DateTime? @map("published_at") @db.Timestamptz(3)
+  attempts    Int       @default(0)
+  lastError   String?   @map("last_error") @db.Text
+
+  @@index([publishedAt, createdAt])
+  @@map("outbox_events")
+}
+
+/// Deduplicação de webhooks do provedor de pagamento.
+/// O provedor entrega ao-menos-uma-vez; guardar o id do evento recebido evita
+/// reprocessar a mesma notificação quando ela chega duplicada.
+model ProcessedWebhook {
+  id          String   @id @db.VarChar(200)
+  provider    String   @db.VarChar(40)
+  receivedAt  DateTime @default(now()) @map("received_at") @db.Timestamptz(3)
+
+  @@map("processed_webhooks")
+}
