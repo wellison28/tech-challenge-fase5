@@ -462,6 +462,19 @@ describe('API HTTP do customer-service', () => {
       expect(Array.isArray(response.json().accessLog)).toBe(true);
     });
 
+    it('nem o admin exporta os dados de outro titular em claro', async () => {
+      const id = (await register()).json().id;
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/customers/${id}/personal-data-export`,
+        headers: { authorization: `Bearer ${adminToken}`, 'x-data-purpose': 'DATA_SUBJECT_REQUEST' },
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(response.body).not.toContain(VALID_CPF);
+    });
+
     it('exige a finalidade DATA_SUBJECT_REQUEST para exportar', async () => {
       const id = (await register()).json().id;
       const ownerToken = await signToken({ sub: id });

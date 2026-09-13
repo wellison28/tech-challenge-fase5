@@ -124,7 +124,8 @@ Dois pontos que valem explicitar:
 
 **Nenhum ser humano lê dado pessoal em claro pela API.** Nem `admin`. O dado em
 claro sai por exatamente três caminhos: dois endpoints máquina-a-máquina
-(cobrança e documentação) e a portabilidade solicitada pelo próprio titular.
+(cobrança e documentação) e a portabilidade solicitada pelo próprio titular —
+uma rota que não aceita papel algum, nem `admin`: só o `sub` do próprio titular.
 Se um atendente precisar conferir o CPF, ele confere pelos dígitos visíveis da
 máscara (`***.***.247-25`), que bastam para identificação e não permitem
 reconstrução.

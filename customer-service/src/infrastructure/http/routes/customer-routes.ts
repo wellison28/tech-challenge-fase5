@@ -80,6 +80,9 @@ export async function customerRoutes(
   const auth = authenticate(verify);
   const selfOrStaff = authorizeSelfOrRoles([ROLE_ADMIN, ROLE_SUPPORT]);
   const selfOrAdmin = authorizeSelfOrRoles([ROLE_ADMIN]);
+  // Sem papel algum: só o próprio titular. Usado onde a resposta traz dado
+  // pessoal em claro — nenhum operador humano, nem `admin`, passa por aqui.
+  const selfOnly = authorizeSelfOrRoles([]);
   const adminOnly = authorize({ roles: [ROLE_ADMIN] });
 
   const errors = {
@@ -250,7 +253,7 @@ export async function customerRoutes(
   typed.get(
     '/customers/:id/personal-data-export',
     {
-      onRequest: [auth, selfOrAdmin, requirePurpose(['DATA_SUBJECT_REQUEST'])],
+      onRequest: [auth, selfOnly, requirePurpose(['DATA_SUBJECT_REQUEST'])],
       schema: {
         tags: ['LGPD'],
         summary: 'Portabilidade: exporta todos os dados do titular (art. 18, V)',

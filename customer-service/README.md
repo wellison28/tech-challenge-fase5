@@ -17,7 +17,8 @@ nenhum titular.
 | Consulta e atualização cadastral (mascarada) | Titular, `support`, `admin` |
 | Ativação e bloqueio de cadastro | `admin` |
 | Consentimento: conceder e revogar | Titular, `admin` |
-| Portabilidade e eliminação (art. 18, V e VI) | Titular, `admin` |
+| Portabilidade (art. 18, V) — devolve dado em claro | Somente o titular |
+| Eliminação (art. 18, VI) | Titular, `admin` |
 | Elegibilidade de compra | `sales-service` (SAGA) — sem dado pessoal |
 | Perfil de cobrança / dossiê de documentação | `sales-service` (SAGA) — auditado |
 
@@ -140,7 +141,7 @@ esteve aqui", então ele também é apagado.
 | `POST` | `/customers/:id/block` | `admin` | qualquer |
 | `POST` | `/customers/:id/consents` | titular, `admin` | qualquer |
 | `DELETE` | `/customers/:id/consents/:purpose` | titular, `admin` | qualquer |
-| `GET` | `/customers/:id/personal-data-export` | titular, `admin` | `DATA_SUBJECT_REQUEST` |
+| `GET` | `/customers/:id/personal-data-export` | somente o titular | `DATA_SUBJECT_REQUEST` |
 | `DELETE` | `/customers/:id` | titular, `admin` | `DATA_SUBJECT_REQUEST` |
 | `GET` | `/internal/customers/:id/eligibility` | escopo `customers.eligibility` | `PURCHASE_SAGA` |
 | `GET` | `/internal/customers/:id/billing-profile` | escopo `customers.billing` | `PAYMENT_CODE_ISSUANCE` |
