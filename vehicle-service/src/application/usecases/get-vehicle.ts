@@ -1,5 +1,5 @@
 import { NotFoundError } from '../../domain/errors/domain-error';
-import { VehicleDTO, toVehicleDTO } from '../dto/vehicle-dto';
+import { VehicleDTO, toPublicVehicleDTO } from '../dto/vehicle-dto';
 import { UnitOfWork } from '../ports/unit-of-work';
 
 export class GetVehicleUseCase {
@@ -10,6 +10,6 @@ export class GetVehicleUseCase {
     if (!vehicle) {
       throw new NotFoundError('Veículo', vehicleId);
     }
-    return toVehicleDTO(vehicle);
+    return toPublicVehicleDTO(vehicle);
   }
 }

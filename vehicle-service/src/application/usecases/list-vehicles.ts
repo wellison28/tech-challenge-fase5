@@ -5,7 +5,7 @@ import {
   VehicleFilters,
   VehicleSortField,
 } from '../../domain/repositories/vehicle-repository';
-import { VehicleDTO, toVehicleDTO } from '../dto/vehicle-dto';
+import { VehicleDTO, toPublicVehicleDTO } from '../dto/vehicle-dto';
 import { UnitOfWork } from '../ports/unit-of-work';
 
 export interface ListVehiclesQuery extends VehicleFilters {
@@ -39,7 +39,7 @@ export class ListVehiclesUseCase {
       }),
     );
 
-    return { ...result, items: result.items.map(toVehicleDTO) };
+    return { ...result, items: result.items.map(toPublicVehicleDTO) };
   }
 
   /** Requisito: veículos à venda, do mais barato para o mais caro. */

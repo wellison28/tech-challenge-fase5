@@ -1,4 +1,4 @@
-import { Vehicle } from '../../domain/entities/vehicle';
+import { Vehicle, VehicleStatus } from '../../domain/entities/vehicle';
 
 /** Representação de saída do veículo. Preço exposto em centavos e em reais. */
 export interface VehicleDTO {
@@ -72,4 +72,17 @@ export function toVehicleDTO(vehicle: Vehicle): VehicleDTO {
     createdAt: vehicle.createdAt.toISOString(),
     updatedAt: vehicle.updatedAt.toISOString(),
   };
+}
+
+/**
+ * Representação do catálogo público, que não exige login.
+ *
+ * A placa só sai enquanto o veículo está à venda. Reservado ou vendido, ele já
+ * tem um comprador, e a placa passa a ser associável a essa pessoa por consulta
+ * externa (Detran, aplicativos de consulta veicular). Quem opera o estoque
+ * continua recebendo a placa pelas rotas autenticadas.
+ */
+export function toPublicVehicleDTO(vehicle: Vehicle): VehicleDTO {
+  const dto = toVehicleDTO(vehicle);
+  return vehicle.status === VehicleStatus.AVAILABLE ? dto : { ...dto, licensePlate: null };
 }

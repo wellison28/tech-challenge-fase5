@@ -156,6 +156,25 @@ describe('ListVehiclesUseCase', () => {
     expect(sold.items.map((item) => item.priceInCents)).toEqual([4_000_000, 8_000_000]);
   });
 
+  it('o catálogo público só mostra a placa de veículo à venda', async () => {
+    const { register, reserve, confirmSale, list } = setup();
+    const sold = await register.execute(vehiclePayload({ vin: '9BWZZZ377VT000001', licensePlate: 'AAA1A11' }));
+    const reserved = await register.execute(vehiclePayload({ vin: '9BWZZZ377VT000002', licensePlate: 'BBB2B22' }));
+    await register.execute(vehiclePayload({ vin: '9BWZZZ377VT000003', licensePlate: 'CCC3C33' }));
+
+    await reserve.execute({ vehicleId: sold.id, customerId: CUSTOMER_A, orderId: ORDER_A, correlationId: 'c' });
+    await confirmSale.execute({ vehicleId: sold.id, orderId: ORDER_A, customerId: CUSTOMER_A, correlationId: 'c' });
+    await reserve.execute({ vehicleId: reserved.id, customerId: CUSTOMER_B, orderId: ORDER_B, correlationId: 'c' });
+
+    const all = await list.execute({});
+    const plateOf = (id: string) => all.items.find((item) => item.id === id)?.licensePlate;
+
+    expect(plateOf(sold.id)).toBeNull();
+    expect(plateOf(reserved.id)).toBeNull();
+    expect((await list.listAvailable({})).items[0]?.licensePlate).toBe('CCC3C33');
+    expect((await list.listSold({})).items[0]?.licensePlate).toBeNull();
+  });
+
   it('pagina mantendo a ordenação', async () => {
     const { register, list } = setup();
     for (let i = 1; i <= 5; i += 1) {
