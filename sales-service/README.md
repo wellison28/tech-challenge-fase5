@@ -89,7 +89,7 @@ testável em milissegundos.
 | Pagamento não é efetuado | `TimeoutSeconds` do `AguardarPagamento` dispara a compensação | ASL + `ExpireOrdersUseCase` (rede de segurança) |
 | Pagamento recusado | Webhook devolve `SendTaskFailure` com `PagamentoRecusado` | `ConfirmPaymentUseCase` |
 | Cliente desiste em qualquer passo | `POST /orders/:id/cancellation` devolve o token com `ClienteDesistiu` | `CancelPurchaseUseCase` |
-| Pagamento confirmado **depois** do prazo | Não conclui a venda: estorna. A reserva pode ter caído e o carro ter sido vendido a outro | `Order.markPaid` |
+| Pagamento confirmado **depois** do prazo | Não conclui a venda: a compensação encontra a cobrança paga e estorna. A reserva pode ter caído e o carro ter sido vendido a outro | `Order.markPaid`, `steps.compensate` |
 | Webhook perdido e cliente pagou | A varredura consulta o provedor antes de compensar e resgata a venda | `ExpireOrdersUseCase` |
 | Compensação falha no meio | Pedido fica em `COMPENSATING` — estado observável e alarmado | `steps.compensate` |
 
@@ -105,7 +105,7 @@ ao-menos-uma-vez:
 | Emitir cobrança | `Idempotency-Key` = `orderId`; o provedor devolve a mesma cobrança |
 | Confirmar pagamento | `Order.markPaid` retorna sem efeito se já pago |
 | Baixa no estoque | O passo nem chama o parceiro se o pedido já está `SALE_CONFIRMED` |
-| Compensar | Cancelar cobrança e liberar reserva são idempotentes nos parceiros |
+| Compensar | Liberar reserva é idempotente no parceiro; a cobrança paga é estornada com `Idempotency-Key` própria, e a pendente é cancelada |
 
 ## Invariante entre serviços
 

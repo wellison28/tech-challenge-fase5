@@ -4,7 +4,7 @@ import { OrderEventType, OrderPayload } from '../../domain/events/domain-event';
 import { EventFactory } from '../events/event-factory';
 import { Clock } from '../ports/clock';
 import { CustomerDirectoryPort } from '../ports/customer-directory';
-import { PaymentGatewayPort } from '../ports/payment-gateway';
+import { PaymentChargeStatus, PaymentGatewayPort } from '../ports/payment-gateway';
 import { UnitOfWork } from '../ports/unit-of-work';
 import { VehicleCatalogPort } from '../ports/vehicle-catalog';
 
@@ -275,11 +275,9 @@ export class PurchaseSagaSteps {
 
     for (const step of pending) {
       try {
+        let detail: string | null = null;
         if (step === SagaStep.COMPENSATE_CANCEL_PAYMENT && order.paymentChargeId) {
-          await this.payments.cancelCharge({
-            chargeId: order.paymentChargeId,
-            correlationId: input.correlationId,
-          });
+          detail = await this.undoCharge(order.paymentChargeId, order.id, input.correlationId);
         }
         if (step === SagaStep.COMPENSATE_RELEASE_VEHICLE) {
           await this.vehicles.releaseReservation({
@@ -296,7 +294,7 @@ export class PurchaseSagaSteps {
             correlationId: input.correlationId,
           });
         }
-        await this.recordCompensation(input.orderId, step, 'SUCCEEDED', null);
+        await this.recordCompensation(input.orderId, step, 'SUCCEEDED', detail);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         failures.push(`${step}: ${message}`);
@@ -392,6 +390,32 @@ export class PurchaseSagaSteps {
           : {}),
       };
     });
+  }
+
+  /**
+   * Desfaz a cobrança conforme o estado dela no provedor, e não conforme o
+   * pedido. Um pagamento tardio (recusado pelo prazo) nunca marca o pedido como
+   * pago, mas o dinheiro saiu da conta do cliente; o mesmo vale para um
+   * pagamento que chega junto com a desistência. Cobrança paga é estornada;
+   * qualquer outra é cancelada.
+   */
+  private async undoCharge(chargeId: string, orderId: string, correlationId: string): Promise<string> {
+    const charge = await this.payments.getCharge({ chargeId, correlationId });
+
+    if (charge.status === PaymentChargeStatus.PAID) {
+      await this.payments.refundCharge({
+        chargeId,
+        idempotencyKey: `${orderId}:refund`,
+        correlationId,
+      });
+      return 'Cobrança paga: valor estornado';
+    }
+    if (charge.status === PaymentChargeStatus.REFUNDED) {
+      return 'Cobrança já estornada';
+    }
+
+    await this.payments.cancelCharge({ chargeId, correlationId });
+    return 'Cobrança cancelada';
   }
 
   private async recordCompensation(

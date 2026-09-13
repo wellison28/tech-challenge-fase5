@@ -194,7 +194,7 @@ sequenceDiagram
         API->>S: 6. COMPLETED
     else não paga em 25 min / recusa / desiste
         SF->>SF: TimeoutSeconds ou SendTaskFailure
-        SF->>P: cancelar cobrança
+        SF->>P: cancelar cobrança (estornar, se já paga)
         SF->>V: liberar reserva
         Note over SF: CANCELLED — veículo volta à vitrine
     end

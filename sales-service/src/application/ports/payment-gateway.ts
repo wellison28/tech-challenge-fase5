@@ -12,6 +12,7 @@ export const PaymentChargeStatus = {
   EXPIRED: 'EXPIRED',
   CANCELLED: 'CANCELLED',
   REFUSED: 'REFUSED',
+  REFUNDED: 'REFUNDED',
 } as const;
 export type PaymentChargeStatus =
   (typeof PaymentChargeStatus)[keyof typeof PaymentChargeStatus];
@@ -31,8 +32,21 @@ export interface PaymentGatewayPort {
     correlationId: string;
   }): Promise<PaymentCharge>;
 
-  /** Compensação do passo 3. */
+  /** Compensação do passo 3, para cobrança ainda não paga. */
   cancelCharge(params: { chargeId: string; correlationId: string }): Promise<void>;
+
+  /**
+   * Compensação do passo 3, para cobrança já paga: devolve o valor integral.
+   *
+   * Cancelar uma cobrança paga não devolve o dinheiro. `idempotencyKey` é
+   * própria do estorno, para que a reexecução da compensação não estorne duas
+   * vezes.
+   */
+  refundCharge(params: {
+    chargeId: string;
+    idempotencyKey: string;
+    correlationId: string;
+  }): Promise<void>;
 
   /**
    * Consulta ativa do status.

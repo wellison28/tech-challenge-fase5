@@ -10,6 +10,7 @@ import { RegisterPaymentWaiterUseCase } from '../../../src/application/usecases/
 import { StartPurchaseUseCase } from '../../../src/application/usecases/start-purchase';
 import { CancellationReason, OrderStatus } from '../../../src/domain/entities/order';
 import { ConflictError } from '../../../src/domain/errors/domain-error';
+import { PaymentChargeStatus, PaymentGatewayPort } from '../../../src/application/ports/payment-gateway';
 import { OrderEventType } from '../../../src/domain/events/domain-event';
 import { InlineSagaLauncher } from '../../../src/infrastructure/saga/saga-launcher';
 import { FakePaymentGateway } from '../../../src/infrastructure/clients/payment-gateway';
@@ -250,6 +251,7 @@ describe('SAGA — pagamento não efetuado', () => {
     const chargeId = (await ctx.uow.orders.findById(started.id))!.paymentChargeId!;
 
     ctx.clock.advanceMinutes(PAYMENT_WINDOW_MINUTES + 1);
+    ctx.payments.simulatePayment(chargeId); // o dinheiro saiu da conta do cliente
     const order = await ctx.confirmPayment.execute({
       chargeId, outcome: 'PAID', correlationId: 'corr-2',
     });
@@ -258,6 +260,42 @@ describe('SAGA — pagamento não efetuado', () => {
     expect(order.cancellationReason).toBe(CancellationReason.PAYMENT_TIMEOUT);
     expect(ctx.vehicles.soldVehicles.has(VEHICLE)).toBe(false);
     expect(ctx.vehicles.isReserved(VEHICLE)).toBe(false);
+    expect((await ctx.payments.getCharge({ chargeId })).status).toBe(PaymentChargeStatus.REFUNDED);
+  });
+
+  it('cobrança ainda não paga é cancelada, não estornada', async () => {
+    const ctx = setup();
+    const started = await ctx.startPurchase.execute({
+      customerId: CUSTOMER_A, vehicleId: VEHICLE, correlationId: 'corr-1',
+    });
+    const chargeId = (await ctx.uow.orders.findById(started.id))!.paymentChargeId!;
+
+    await ctx.confirmPayment.execute({ chargeId, outcome: 'REFUSED', correlationId: 'corr-2' });
+
+    expect((await ctx.payments.getCharge({ chargeId })).status).toBe(PaymentChargeStatus.CANCELLED);
+  });
+
+  it('estorno repetido na reexecução da compensação não devolve em dobro', async () => {
+    const ctx = setup();
+    const started = await ctx.startPurchase.execute({
+      customerId: CUSTOMER_A, vehicleId: VEHICLE, correlationId: 'corr-1',
+    });
+    const chargeId = (await ctx.uow.orders.findById(started.id))!.paymentChargeId!;
+    ctx.payments.simulatePayment(chargeId);
+
+    const refunds: string[] = [];
+    const refund = ctx.payments.refundCharge.bind(ctx.payments);
+    ctx.payments.refundCharge = async (params: Parameters<PaymentGatewayPort['refundCharge']>[0]) => {
+      refunds.push(params.idempotencyKey);
+      return refund(params);
+    };
+
+    const input = { orderId: started.id, correlationId: 'corr-2', reason: CancellationReason.SYSTEM_FAILURE };
+    await ctx.steps.compensate(input);
+    await ctx.steps.compensate(input);
+
+    expect(refunds).toEqual([`${started.id}:refund`]);
+    expect((await ctx.payments.getCharge({ chargeId })).status).toBe(PaymentChargeStatus.REFUNDED);
   });
 
   it('webhook reentregue após a conclusão não tem efeito', async () => {

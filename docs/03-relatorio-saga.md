@@ -46,7 +46,7 @@ completa, ou tudo o que ela produziu é desfeito.
 |---|---|---|---|---|
 | 1 | Reservar veículo | vehicle-service | Liberar reserva | `orderId` |
 | 2 | Validar comprador | customer-service | — (só leitura) | — |
-| 3 | Emitir código de pagamento | customer-service + provedor | Cancelar cobrança | `Idempotency-Key = orderId` |
+| 3 | Emitir código de pagamento | customer-service + provedor | Cancelar a cobrança ou, se já paga, estornar | `Idempotency-Key = orderId` |
 | 4 | Aguardar pagamento | — (espera por callback) | — | estado do pedido |
 | 5 | Dar baixa no estoque | vehicle-service | Estornar (fora da SAGA) | `orderId` |
 | 6 | Retirada do veículo | sales-service | — (terminal) | `deliveredAt` |
@@ -311,7 +311,7 @@ passos não forem idempotentes, o retry duplica reservas e cobranças.
 | Emitir cobrança | `Idempotency-Key = orderId`; o provedor devolve a mesma cobrança |
 | Confirmar pagamento | `Order.markPaid` retorna sem efeito se já pago |
 | Baixa no estoque | O passo nem chama o parceiro se o pedido já está `SALE_CONFIRMED` |
-| Compensar | Cancelar cobrança e liberar reserva são idempotentes nos parceiros; liberar um veículo já disponível não é erro |
+| Compensar | Liberar reserva é idempotente, e liberar um veículo já disponível não é erro. A cobrança é consultada no provedor antes de ser desfeita: paga é estornada, com `Idempotency-Key` própria do estorno; pendente é cancelada |
 
 Há teste automatizado para cada uma dessas propriedades.
 
@@ -390,7 +390,7 @@ documentação é uma invariante que será quebrada.
 | "O pagamento não é efetuado" | `TimeoutSeconds` do `AguardarPagamento` | Compensação: cobrança cancelada, veículo de volta à vitrine |
 | "O cliente desiste em qualquer um dos passos" | `POST /orders/:id/cancellation` → `SendTaskFailure("ClienteDesistiu")` | A própria máquina de estados conduz a compensação |
 | Pagamento **recusado** pelo provedor | Webhook → `SendTaskFailure("PagamentoRecusado")` | Compensação |
-| Pagamento confirmado **depois** do prazo | `Order.markPaid` recusa | Estorno, não venda — no intervalo o carro pode ter sido vendido a outro |
+| Pagamento confirmado **depois** do prazo | `Order.markPaid` recusa; a compensação encontra a cobrança paga no provedor | Estorno, não venda — no intervalo o carro pode ter sido vendido a outro |
 | Webhook perdido, cliente pagou | Reconciliação (9.2) | Venda **resgatada** |
 | A compensação falha | Estado `CompensacaoFalhou` | Pedido em `COMPENSATING`, alarme crítico, e a rede de segurança 9.1 ainda devolve o veículo |
 

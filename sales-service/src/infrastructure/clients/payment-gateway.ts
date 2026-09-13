@@ -52,6 +52,20 @@ export class HttpPaymentGateway implements PaymentGatewayPort {
     });
   }
 
+  async refundCharge(params: {
+    chargeId: string;
+    idempotencyKey: string;
+    correlationId: string;
+  }): Promise<void> {
+    await this.http.send({
+      method: 'POST',
+      path: `/charges/${params.chargeId}/refunds`,
+      headers: { 'idempotency-key': params.idempotencyKey },
+      correlationId: params.correlationId,
+      step: 'COMPENSATE_CANCEL_PAYMENT',
+    });
+  }
+
   async getCharge(params: {
     chargeId: string;
     correlationId: string;
@@ -138,6 +152,13 @@ export class FakePaymentGateway implements PaymentGatewayPort {
     const charge = this.charges.get(params.chargeId);
     if (charge && charge.status === PaymentChargeStatus.PENDING) {
       charge.status = PaymentChargeStatus.CANCELLED;
+    }
+  }
+
+  async refundCharge(params: { chargeId: string }): Promise<void> {
+    const charge = this.charges.get(params.chargeId);
+    if (charge && charge.status === PaymentChargeStatus.PAID) {
+      charge.status = PaymentChargeStatus.REFUNDED;
     }
   }
 
