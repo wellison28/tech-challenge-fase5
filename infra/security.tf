@@ -247,7 +247,9 @@ resource "aws_wafv2_web_acl" "api" {
 
         scope_down_statement {
           byte_match_statement {
-            search_string         = "/customers"
+            # O caminho que o WAF inspeciona inclui o stage do REST API. Casa o
+            # cadastro e não `/internal/customers`, chamado pelo sales-service.
+            search_string         = "/${local.api_stage_name}/customers"
             positional_constraint = "STARTS_WITH"
 
             field_to_match {

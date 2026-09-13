@@ -48,7 +48,7 @@ locals {
 module "lambda_vehicle_api" {
   source = "./modules/lambda-function"
 
-  function_name = "${local.prefix}-vehicle-api"
+  function_name = local.api_functions.vehicle
   description   = "API do catalogo e estoque de veiculos"
   handler       = "dist/lambda-api.handler"
 
@@ -82,7 +82,7 @@ module "lambda_vehicle_api" {
 module "lambda_customer_api" {
   source = "./modules/lambda-function"
 
-  function_name = "${local.prefix}-customer-api"
+  function_name = local.api_functions.customer
   description   = "API de cadastro de compradores e dados pessoais"
   handler       = "dist/lambda-api.handler"
 
@@ -121,7 +121,7 @@ module "lambda_customer_api" {
 module "lambda_sales_api" {
   source = "./modules/lambda-function"
 
-  function_name = "${local.prefix}-sales-api"
+  function_name = local.api_functions.sales
   description   = "API do processo de compra e webhook de pagamento"
   handler       = "dist/lambda-api.handler"
 
@@ -152,8 +152,8 @@ locals {
   sales_env = {
     SAGA_MODE                       = "stepfunctions"
     PURCHASE_SAGA_STATE_MACHINE_ARN = local.purchase_saga_arn
-    VEHICLE_SERVICE_URL             = "https://${aws_apigatewayv2_api.main.id}.execute-api.${var.aws_region}.amazonaws.com"
-    CUSTOMER_SERVICE_URL            = "https://${aws_apigatewayv2_api.main.id}.execute-api.${var.aws_region}.amazonaws.com"
+    VEHICLE_SERVICE_URL             = local.api_base_url
+    CUSTOMER_SERVICE_URL            = local.api_base_url
     PAYMENT_PROVIDER                = "http"
     PAYMENT_WEBHOOK_SECRET_ID       = aws_secretsmanager_secret.payment_webhook.name
     M2M_CREDENTIALS_SECRET_ID       = aws_secretsmanager_secret.sales_m2m_credentials.name

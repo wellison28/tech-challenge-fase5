@@ -43,7 +43,7 @@ terraform init -backend=false && terraform validate
 | `database.tf` | Três clusters Aurora Serverless v2 + RDS Proxy |
 | `iam.tf` | Um papel de execução por serviço, com permissões escritas caso a caso |
 | `lambdas.tf` | 3 APIs, 6 tasks da SAGA, 5 processos periódicos |
-| `api.tf` | HTTP API, authorizer JWT, rotas, stage, associação com o WAF |
+| `api.tf` | REST API (OpenAPI), authorizer do Cognito, rotas, stage, associação com o WAF |
 | `messaging.tf` | EventBridge bus, arquivo, DLQs, EventBridge Scheduler |
 | `saga.tf` | Máquina de estados do Step Functions |
 | `observability.tf` | Alarmes, filtros de métrica, painel |
@@ -100,7 +100,7 @@ estado. O segredo do cliente M2M é gravado no Secrets Manager.
 | 3× Aurora Serverless v2 (0,5–4 ACU) | maior parcela; escala com o uso |
 | 3× RDS Proxy | por vCPU da instância-alvo |
 | Lambda (ARM64) | proporcional a invocações; o nível gratuito cobre tráfego baixo |
-| API Gateway HTTP | ~1/3 do REST API |
+| API Gateway REST | por milhão de requisições — mais caro que o HTTP API, mas é o que aceita WAF |
 | NAT Gateway (2×) | custo fixo relevante — é o item a revisar primeiro |
 | WAF + regras gerenciadas | fixo por ACL + por milhão de requisições |
 | Step Functions Standard | por transição de estado |

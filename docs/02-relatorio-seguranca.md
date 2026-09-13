@@ -107,7 +107,7 @@ distintas, papéis IAM distintos e bancos distintos.
   e-mail está cadastrado.
 - Fluxo *Authorization Code + PKCE*, nunca *implicit* — o fluxo implícito devolve
   o token na URL, onde ele fica no histórico do navegador e nos logs de proxy.
-- O token é validado pelo **authorizer JWT do API Gateway**, antes de qualquer
+- O token é validado pelo **authorizer do Cognito no API Gateway**, antes de qualquer
   Lambda ser invocada.
 
 ### 3.2 Autorização — perfis e o que cada um alcança
@@ -523,7 +523,7 @@ reputacional e regulatório correspondente.
 
 | Camada | Controles |
 |---|---|
-| **Borda** | WAF (5 regras), API Gateway com authorizer JWT, throttling, CORS restrito |
+| **Borda** | WAF (5 regras), API Gateway REST com authorizer do Cognito, throttling, CORS restrito |
 | **Identidade** | Cognito com MFA e advanced security, grupos, escopos M2M granulares, tokens curtos |
 | **Aplicação** | Mascaramento por padrão, finalidade obrigatória, verificação de titularidade, validação de schema, rate limit próprio |
 | **Dados** | Envelope encryption AES-256-GCM com AAD, índice cego com pepper, CMK por finalidade, criptografia de volume |

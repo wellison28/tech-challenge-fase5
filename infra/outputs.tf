@@ -1,6 +1,6 @@
 output "api_endpoint" {
   description = "URL base da API."
-  value       = aws_apigatewayv2_stage.main.invoke_url
+  value       = aws_api_gateway_stage.main.invoke_url
 }
 
 output "cognito_user_pool_id" {

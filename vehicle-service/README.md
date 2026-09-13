@@ -162,7 +162,7 @@ Cobertura mínima exigida no CI: 85% de linhas em `domain/` e `application/`.
 
 Dois artefatos a partir do mesmo código:
 
-- `src/lambda-api.ts` — API atrás do API Gateway (HTTP API).
+- `src/lambda-api.ts` — API atrás do API Gateway (REST API).
 - `src/lambda-jobs.ts` — `expireReservationsHandler` e `publishOutboxHandler`,
   disparados por EventBridge Scheduler.
 

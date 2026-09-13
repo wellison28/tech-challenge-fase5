@@ -141,7 +141,7 @@ terraform init -backend=false && terraform validate
 ```
 
 Provisiona VPC de três camadas, três clusters Aurora Serverless v2 com RDS
-Proxy, 14 funções Lambda, API Gateway com authorizer JWT, Cognito com escopos
+Proxy, 14 funções Lambda, API Gateway REST com authorizer do Cognito, Cognito com escopos
 granulares, Step Functions, EventBridge e os serviços de segurança (KMS, Secrets
 Manager, WAF, GuardDuty, Security Hub, CloudTrail).
 

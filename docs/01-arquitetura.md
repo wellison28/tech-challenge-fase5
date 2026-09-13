@@ -20,7 +20,7 @@ flowchart TB
 
     subgraph edge["Borda"]
         WAF["AWS WAF<br/>limite de taxa · OWASP · reputação de IP"]
-        APIGW["API Gateway HTTP<br/>authorizer JWT do Cognito"]
+        APIGW["API Gateway REST<br/>authorizer do Cognito"]
         COG["Amazon Cognito<br/>usuários · grupos · escopos M2M"]
     end
 
@@ -123,7 +123,7 @@ que não fecha.
 
 | Escolha | Alternativa | Por que a escolha |
 |---|---|---|
-| **API Gateway HTTP API** | REST API | Custa cerca de um terço, tem latência menor e traz o authorizer JWT nativo. Os recursos exclusivos do REST API (modelos, planos de uso, chaves de API) não são necessários: a validação de payload é feita por schema Zod dentro do serviço, e o controle de taxa fica no WAF e no throttling do stage. |
+| **API Gateway REST API** | HTTP API | O AWS WAF só se associa a stage de REST API: o HTTP API não aceita web ACL, e sem WAF o limite de taxa, as regras gerenciadas e o limite apertado no cadastro ficariam sem lugar na borda. O REST API também traz o authorizer nativo do Cognito, que valida o token antes de a Lambda ser invocada, e throttling por stage. Custa mais por milhão de requisições que o HTTP API — diferença irrelevante no volume de uma revenda. A validação de payload fica no serviço, por schema Zod. |
 
 ---
 
