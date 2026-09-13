@@ -67,7 +67,7 @@ documentação — já ajustando o workflow de cada um para a nova raiz:
 | Processo de compra do começo ao fim | SAGA de 6 passos, orquestrada por Step Functions |
 | Outro cliente reserva antes | Trava otimista + invariante do agregado → 409 → pedido cancelado sem emitir cobrança |
 | Pagamento não efetuado | `TimeoutSeconds` do orquestrador → compensação |
-| Cliente desiste em qualquer passo | `POST /orders/:id/cancellation` → compensação |
+| Cliente desiste em qualquer passo | `POST /orders/:id/cancellation` → compensação, até o pagamento ser confirmado; depois, 409 (devolução) |
 | Dados para emitir o código de pagamento | `GET /internal/customers/:id/billing-profile` — escopo próprio, finalidade declarada, auditado |
 | Dados para emitir a documentação na retirada | `GET /internal/customers/:id/documentation-dossier` |
 | Regras de segurança para dados sensíveis | Ver [`docs/02-relatorio-seguranca.md`](docs/02-relatorio-seguranca.md) |

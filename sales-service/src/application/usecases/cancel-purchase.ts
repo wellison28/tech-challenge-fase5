@@ -7,10 +7,12 @@ import { UnitOfWork } from '../ports/unit-of-work';
 import { PurchaseSagaSteps } from '../saga/steps';
 
 /**
- * Desistência do cliente, em qualquer etapa antes da conclusão.
+ * Desistência do cliente, em qualquer etapa até o pagamento ser confirmado.
  *
  * É o cenário explícito do enunciado ("o cliente desiste da compra em qualquer
- * um dos passos"). Se existir uma execução suspensa aguardando o pagamento, ela
+ * um dos passos"). Depois do pagamento a resposta é 409: a SAGA já segue para a
+ * baixa no estoque, e desfazer a compra vira devolução (ver
+ * `Order.assertCustomerCanGiveUp`). Se existir uma execução suspensa aguardando o pagamento, ela
  * é retomada com o erro `ClienteDesistiu`, e a própria máquina de estados
  * conduz a compensação — em vez de duas rotas concorrentes desfazendo o mesmo
  * pedido. Sem execução suspensa, a compensação é chamada diretamente.
@@ -35,6 +37,7 @@ export class CancelPurchaseUseCase {
     if (order.isTerminal) {
       return toOrderDTO(order, { includePaymentCode: false });
     }
+    order.assertCustomerCanGiveUp();
 
     const token = await this.uow.execute(async (ctx) => {
       const current = await ctx.orders.findById(params.orderId);

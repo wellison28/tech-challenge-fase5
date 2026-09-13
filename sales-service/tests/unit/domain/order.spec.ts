@@ -202,6 +202,28 @@ describe('Order — compensação', () => {
 
     expect(order.beginCompensation(CancellationReason.CUSTOMER_GAVE_UP, null, NOW)).toBe(false);
   });
+
+  it('venda confirmada não entra em compensação — a baixa é o ponto de não retorno', () => {
+    const order = orderAwaitingPayment();
+    order.markPaid({ now: NOW });
+    order.markSaleConfirmed(NOW);
+
+    expect(() => order.beginCompensation(CancellationReason.CUSTOMER_GAVE_UP, null, NOW)).toThrow(
+      ConflictError,
+    );
+    expect(order.status).toBe(OrderStatus.SALE_CONFIRMED);
+  });
+
+  it('o cliente desiste até o pagamento; depois, não', () => {
+    const awaiting = orderAwaitingPayment();
+    expect(() => awaiting.assertCustomerCanGiveUp()).not.toThrow();
+
+    awaiting.markPaid({ now: NOW });
+    expect(() => awaiting.assertCustomerCanGiveUp()).toThrow(ConflictError);
+
+    awaiting.markSaleConfirmed(NOW);
+    expect(() => awaiting.assertCustomerCanGiveUp()).toThrow(ConflictError);
+  });
 });
 
 describe('Order — token de callback do Step Functions', () => {

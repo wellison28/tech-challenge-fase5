@@ -337,6 +337,23 @@ describe('API HTTP do sales-service', () => {
       expect(response.statusCode).toBe(403);
     });
 
+    it('desistência depois do pagamento responde 409 e mantém a venda', async () => {
+      const orderId = (await startPurchase()).json().id;
+      const chargeId = (await uow.orders.findById(orderId))!.paymentChargeId!;
+      payments.simulatePayment(chargeId);
+      await sendWebhook(chargeId, 'PAID');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/orders/${orderId}/cancellation`,
+        headers: { authorization: `Bearer ${buyerToken}` },
+      });
+
+      expect(response.statusCode).toBe(409);
+      expect((await uow.orders.findById(orderId))!.status).toBe('SALE_CONFIRMED');
+      expect(vehicles.soldVehicles.has(VEHICLE)).toBe(true);
+    });
+
     it('a retirada só é registrada pela loja', async () => {
       const orderId = (await startPurchase()).json().id;
       const chargeId = (await uow.orders.findById(orderId))!.paymentChargeId!;

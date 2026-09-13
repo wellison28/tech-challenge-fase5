@@ -299,6 +299,23 @@ export class Order {
   // ---------------------------------------------------------------------------
 
   /**
+   * Desistência pedida pelo cliente (ou pela loja em nome dele).
+   *
+   * Aceita até o pagamento ser confirmado. A partir daí a SAGA segue para a
+   * baixa no estoque — o ponto de não retorno —, e desfazer a compra passa a ser
+   * devolução (arrependimento, garantia): um processo da loja, com regras e
+   * prazos próprios, e não uma compensação técnica.
+   */
+  assertCustomerCanGiveUp(): void {
+    if (this.props.status === OrderStatus.PAID || this.props.status === OrderStatus.SALE_CONFIRMED) {
+      throw new ConflictError(
+        'Pagamento já confirmado: a desistência agora é devolução, tratada pela loja',
+        { orderId: this.props.id, status: this.props.status },
+      );
+    }
+  }
+
+  /**
    * Entra em compensação. A partir daqui o pedido não avança mais — só desfaz.
    *
    * Separar `beginCompensation` de `finishCompensation` deixa visível, na
@@ -315,6 +332,13 @@ export class Order {
     }
     if (this.props.status === OrderStatus.COMPLETED) {
       throw new ConflictError('Pedido já concluído não pode ser cancelado', {
+        orderId: this.props.id,
+      });
+    }
+    if (this.props.status === OrderStatus.SALE_CONFIRMED) {
+      // A baixa no estoque é o ponto de não retorno: o vehicle-service recusa
+      // liberar um veículo vendido, e a compensação ficaria presa no meio.
+      throw new ConflictError('Venda já confirmada: desfazê-la é devolução, não compensação', {
         orderId: this.props.id,
       });
     }

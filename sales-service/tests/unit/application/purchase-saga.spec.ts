@@ -362,6 +362,26 @@ describe('SAGA — desistência do cliente', () => {
     expect(order.status).toBe(OrderStatus.COMPLETED);
   });
 
+  it('depois do pagamento a desistência é recusada, sem deixar o pedido pela metade', async () => {
+    const ctx = setup();
+    const started = await ctx.startPurchase.execute({
+      customerId: CUSTOMER_A, vehicleId: VEHICLE, correlationId: 'corr-1',
+    });
+    const chargeId = (await ctx.uow.orders.findById(started.id))!.paymentChargeId!;
+    ctx.payments.simulatePayment(chargeId);
+    await ctx.confirmPayment.execute({ chargeId, outcome: 'PAID', correlationId: 'corr-2' });
+
+    await expect(
+      ctx.cancelPurchase.execute({ orderId: started.id, requestedBy: CUSTOMER_A, correlationId: 'corr-3' }),
+    ).rejects.toThrow(ConflictError);
+
+    const order = (await ctx.uow.orders.findById(started.id))!;
+    expect(order.status).toBe(OrderStatus.SALE_CONFIRMED);
+    expect(ctx.vehicles.soldVehicles.has(VEHICLE)).toBe(true);
+    expect(ctx.vehicles.calls).not.toContain('release');
+    expect((await ctx.payments.getCharge({ chargeId })).status).toBe(PaymentChargeStatus.PAID);
+  });
+
   it('libera o veículo para outro comprador depois da desistência', async () => {
     const ctx = setup();
     const first = await ctx.startPurchase.execute({

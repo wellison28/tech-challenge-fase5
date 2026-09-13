@@ -88,7 +88,7 @@ testável em milissegundos.
 | Outro cliente reserva o veículo antes | O passo 1 recebe 409 (não-retentável); a SAGA encerra com `VEHICLE_UNAVAILABLE` sem emitir cobrança | `steps.reserveVehicle` |
 | Pagamento não é efetuado | `TimeoutSeconds` do `AguardarPagamento` dispara a compensação | ASL + `ExpireOrdersUseCase` (rede de segurança) |
 | Pagamento recusado | Webhook devolve `SendTaskFailure` com `PagamentoRecusado` | `ConfirmPaymentUseCase` |
-| Cliente desiste em qualquer passo | `POST /orders/:id/cancellation` devolve o token com `ClienteDesistiu` | `CancelPurchaseUseCase` |
+| Cliente desiste em qualquer passo | `POST /orders/:id/cancellation` devolve o token com `ClienteDesistiu`. Depois do pagamento confirmado responde 409: desfazer a compra vira devolução | `CancelPurchaseUseCase`, `Order.assertCustomerCanGiveUp` |
 | Pagamento confirmado **depois** do prazo | Não conclui a venda: a compensação encontra a cobrança paga e estorna. A reserva pode ter caído e o carro ter sido vendido a outro | `Order.markPaid`, `steps.compensate` |
 | Webhook perdido e cliente pagou | A varredura consulta o provedor antes de compensar e resgata a venda | `ExpireOrdersUseCase` |
 | Compensação falha no meio | Pedido fica em `COMPENSATING` — estado observável e alarmado | `steps.compensate` |

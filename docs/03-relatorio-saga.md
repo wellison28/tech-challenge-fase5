@@ -48,13 +48,16 @@ completa, ou tudo o que ela produziu é desfeito.
 | 2 | Validar comprador | customer-service | — (só leitura) | — |
 | 3 | Emitir código de pagamento | customer-service + provedor | Cancelar a cobrança ou, se já paga, estornar | `Idempotency-Key = orderId` |
 | 4 | Aguardar pagamento | — (espera por callback) | — | estado do pedido |
-| 5 | Dar baixa no estoque | vehicle-service | Estornar (fora da SAGA) | `orderId` |
+| 5 | Dar baixa no estoque | vehicle-service | — (ponto de não retorno) | `orderId` |
 | 6 | Retirada do veículo | sales-service | — (terminal) | `deliveredAt` |
 
 O passo 2 não tem compensação porque é apenas leitura — não produz efeito a
 desfazer. O passo 5 é o **ponto de não retorno**: depois dele, desfazer a venda
 deixa de ser uma compensação técnica e passa a ser um processo de negócio
-(arrependimento, garantia), com regras e prazos próprios.
+(arrependimento, garantia), com regras e prazos próprios. Por isso a desistência
+só é aceita até o pagamento ser confirmado; depois dele,
+`POST /orders/:id/cancellation` responde `409` em vez de começar uma compensação
+que o vehicle-service recusaria no meio.
 
 ### Por que reservar o veículo é o passo 1
 
@@ -388,7 +391,7 @@ documentação é uma invariante que será quebrada.
 |---|---|---|
 | "Outro cliente reserva o veículo antes" | Passo 1 recebe 409 não-retentável | Pedido `CANCELLED` com motivo `VEHICLE_UNAVAILABLE`. **Nenhuma cobrança é emitida** |
 | "O pagamento não é efetuado" | `TimeoutSeconds` do `AguardarPagamento` | Compensação: cobrança cancelada, veículo de volta à vitrine |
-| "O cliente desiste em qualquer um dos passos" | `POST /orders/:id/cancellation` → `SendTaskFailure("ClienteDesistiu")` | A própria máquina de estados conduz a compensação |
+| "O cliente desiste em qualquer um dos passos" | `POST /orders/:id/cancellation` → `SendTaskFailure("ClienteDesistiu")` | Até o pagamento, a própria máquina de estados conduz a compensação. Depois do pagamento, `409`: desfazer a compra vira devolução |
 | Pagamento **recusado** pelo provedor | Webhook → `SendTaskFailure("PagamentoRecusado")` | Compensação |
 | Pagamento confirmado **depois** do prazo | `Order.markPaid` recusa; a compensação encontra a cobrança paga no provedor | Estorno, não venda — no intervalo o carro pode ter sido vendido a outro |
 | Webhook perdido, cliente pagou | Reconciliação (9.2) | Venda **resgatada** |
