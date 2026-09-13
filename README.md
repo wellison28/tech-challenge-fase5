@@ -119,10 +119,10 @@ npm run lint
 
 | Serviço | Testes | Cobertura (domínio + aplicação) |
 |---|---|---|
-| vehicle-service | 78 | 92% |
-| customer-service | 91 | 90% |
-| sales-service | 75 | 86% |
-| **Total** | **244** | — |
+| vehicle-service | 82 | 93% |
+| customer-service | 104 | 90% |
+| sales-service | 84 | 87% |
+| **Total** | **270** | — |
 
 Os testes cobrem, entre outros: disputa de estoque entre dois compradores,
 idempotência de cada passo da SAGA, compensação que falha no meio, pagamento
